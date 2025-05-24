@@ -115,6 +115,53 @@ class ResourceManager:
 
     def set_metrics_callback(self, cb):
         self.metrics_callback = cb
+        
+    def get_vms(self):
+        """Return a list of all VMs with their current state."""
+        with self.lock:
+            return [{
+                "id": vm.id,
+                "cpu_cores": vm.cpu_capacity,
+                "cpu_used": vm.cpu_used,
+                "ram_gb": vm.ram_capacity,
+                "ram_used": vm.ram_used,
+                "storage_gb": vm.storage_capacity,
+                "storage_used": vm.storage_used,
+                "bandwidth": vm.bandwidth_capacity,
+                "bandwidth_used": vm.bandwidth_used,
+                "gpu": vm.gpu_capacity,
+                "gpu_used": vm.gpu_used,
+                "status": vm.status.name,
+                "cloudlet_count": len(vm.cloudlets),
+                "last_activity": time.time() - vm.last_activity,
+                "is_idle": vm.status == VMStatus.IDLE
+            } for vm in self.vms]
+            
+    def get_cloudlets(self):
+        """Return a list of all cloudlets with their current state."""
+        with self.lock:
+            cloudlets = []
+            for cl in self.cloudlets + list(self.pending_queue):
+                cloudlets.append({
+                    "id": cl.id,
+                    "name": cl.name,
+                    "cpu": cl.cpu,
+                    "ram": cl.ram,
+                    "storage": cl.storage,
+                    "bandwidth": cl.bandwidth,
+                    "gpu": cl.gpu,
+                    "sla_priority": cl.sla_priority,
+                    "status": cl.status.name,
+                    "vm_id": cl.vm_id,
+                    "deadline": cl.deadline,
+                    "time_remaining": max(0, cl.deadline - time.time()),
+                    "age": time.time() - cl.creation_time,
+                    "is_active": cl.status == CloudletStatus.ACTIVE,
+                    "is_completed": cl.status == CloudletStatus.COMPLETED,
+                    "is_failed": cl.status == CloudletStatus.FAILED,
+                    "is_pending": cl.status in [CloudletStatus.WAITING, CloudletStatus.PENDING]
+                })
+            return cloudlets
 
     def add_vm(self, vm):
         with self.lock:

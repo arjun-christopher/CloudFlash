@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from core import ResourceManager, VM, Cloudlet
 import time
 from flask_socketio import SocketIO, emit
@@ -8,6 +8,142 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.serving import run_simple
 import psutil
 import os
+import subprocess
+import atexit
+import signal
+import sys
+from pathlib import Path
+
+# Global variable to store the monitoring process
+monitoring_process = None
+
+# Paths
+BASE_DIR = Path(__file__).parent.parent
+MONITORING_DIR = BASE_DIR / 'cloudflash/monitoring'
+DOCKER_COMPOSE_FILE = MONITORING_DIR / 'docker-compose.monitoring.yml'  # Updated to match actual filename
+
+def _run_monitoring_command(command, timeout=30):
+    """Helper function to run docker-compose commands with timeout."""
+    try:
+        monitoring_dir = str(MONITORING_DIR.absolute())
+        docker_compose_path = str(DOCKER_COMPOSE_FILE.absolute())
+        
+        # Use the full path to docker-compose if available
+        docker_compose_cmd = 'docker-compose'
+        if os.name == 'nt':  # Windows
+            docker_compose_cmd = 'docker-compose.exe'
+        
+        cmd = [docker_compose_cmd, '-f', docker_compose_path] + command
+        
+        print(f"   - Running: {' '.join(cmd)}")
+        
+        # Run with timeout
+        result = subprocess.run(
+            cmd,
+            cwd=monitoring_dir,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        return result
+    except subprocess.TimeoutExpired:
+        print(f"❌ Command timed out after {timeout} seconds")
+        return None
+    except Exception as e:
+        print(f"❌ Error running command: {e}")
+        return None
+
+def start_monitoring_stack():
+    """Start the monitoring stack using Docker Compose."""
+    try:
+        print("🔍 Checking Docker...")
+        # Check if Docker is running
+        try:
+            docker_info = subprocess.run(
+                ['docker', 'info'], 
+                capture_output=True, 
+                text=True
+            )
+            if docker_info.returncode != 0:
+                print("❌ Docker is not running or not installed.")
+                if docker_info.stderr:
+                    print(f"   - Error: {docker_info.stderr.strip()}")
+                print("   - Please start Docker Desktop and try again.")
+                return False
+        except FileNotFoundError:
+            print("❌ Docker is not installed. Please install Docker Desktop from https://www.docker.com/products/docker-desktop/")
+            return False
+            
+        print("✅ Docker is running")
+        
+        # Get the absolute paths
+        monitoring_dir = str(MONITORING_DIR.absolute())
+        docker_compose_path = str(DOCKER_COMPOSE_FILE.absolute())
+        
+        print(f"📂 Monitoring directory: {monitoring_dir}")
+        print(f"📄 Using compose file: {docker_compose_path}")
+        
+        # Stop any existing containers first
+        print("🛑 Stopping any existing monitoring containers...")
+        stop_result = _run_monitoring_command(['down', '--remove-orphans'])
+        
+        # Start the monitoring containers
+        print("🚀 Starting monitoring stack...")
+        start_result = _run_monitoring_command(['up', '-d'])
+        
+        if start_result and start_result.returncode == 0:
+            print("✅ Monitoring stack started successfully")
+            print("   - Grafana: http://localhost:3000 (admin/admin)")
+            print("   - Prometheus: http://localhost:9090")
+            return True
+        else:
+            print("❌ Failed to start monitoring stack")
+            if start_result:
+                if start_result.stdout:
+                    print("=== STDOUT ===\n", start_result.stdout)
+                if start_result.stderr:
+                    print("=== STDERR ===\n", start_result.stderr)
+            return False
+            
+    except Exception as e:
+        print(f"❌ Unexpected error starting monitoring stack: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def stop_monitoring():
+    """Stop the monitoring stack."""
+    global monitoring_process
+    if monitoring_process:
+        try:
+            subprocess.run(
+                ['docker-compose', '-f', str(DOCKER_COMPOSE_FILE), 'down', '-v'],
+                cwd=str(MONITORING_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            monitoring_process = None
+            print("\n🛑 Monitoring stack stopped and cleaned up.")
+        except Exception as e:
+            print(f"❌ Error stopping monitoring stack: {e}")
+
+def cleanup():
+    """Cleanup function to be called on exit."""
+    stop_monitoring()
+    print("\n👋 Goodbye!")
+
+# Register cleanup function
+atexit.register(cleanup)
+
+def signal_handler(sig, frame):
+    """Handle interrupt signals."""
+    print("\n🛑 Received interrupt signal. Cleaning up...")
+    cleanup()
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Initialize Flask app and SocketIO
 app = Flask(__name__)
@@ -66,9 +202,65 @@ metrics_thread.start()
 def broadcast_metrics():
     socketio.emit('metrics_update', manager.get_metrics())
 
-@app.route("/")
-def home():
-    return render_template("index.html")
+@app.route('/')
+def index():
+    # Ensure monitoring stack is running
+    if MONITORING_DIR.exists() and DOCKER_COMPOSE_FILE.exists():
+        start_monitoring_stack()
+    return render_template('index.html', 
+                         vms=manager.get_vms(), 
+                         cloudlets=manager.get_cloudlets(),
+                         metrics=manager.get_metrics())
+
+@app.route('/monitoring')
+def monitoring():
+    """Redirect to Grafana dashboard with fallback."""
+    try:
+        # Try to check if Grafana is accessible
+        import socket
+        socket.create_connection(('localhost', 3000), timeout=1)
+        return redirect('http://localhost:3000')
+    except (socket.error, OSError):
+        return """
+        <html>
+        <head><title>CloudFlash</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h1>⚠️ Grafana Not Running</h1>
+            <p>Grafana is not currently running. To enable monitoring:</p>
+            <ol style="text-align: left; max-width: 600px; margin: 20px auto;">
+                <li>Install Docker Desktop from <a href="https://www.docker.com/products/docker-desktop/" target="_blank">docker.com</a></li>
+                <li>Start Docker Desktop</li>
+                <li>Restart the CloudFlash application</li>
+            </ol>
+            <p><a href="/">← Back to CloudFlash</a></p>
+        </body>
+        </html>
+        """, 503
+
+@app.route('/prometheus')
+def prometheus():
+    """Redirect to Prometheus UI with fallback."""
+    try:
+        # Try to check if Prometheus is accessible
+        import socket
+        socket.create_connection(('localhost', 9090), timeout=1)
+        return redirect('http://localhost:9090')
+    except (socket.error, OSError):
+        return """
+        <html>
+        <head><title>CloudFlash</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h1>⚠️ Prometheus Not Running</h1>
+            <p>Prometheus is not currently running. To enable monitoring:</p>
+            <ol style="text-align: left; max-width: 600px; margin: 20px auto;">
+                <li>Install Docker Desktop from <a href="https://www.docker.com/products/docker-desktop/" target="_blank">docker.com</a></li>
+                <li>Start Docker Desktop</li>
+                <li>Restart the CloudFlash application</li>
+            </ol>
+            <p><a href="/">← Back to CloudFlash</a></p>
+        </body>
+        </html>
+        """, 503
 
 @app.route("/api/vms", methods=["POST"])
 def create_vm():
@@ -195,17 +387,85 @@ class AutoScaler:
             return 0
         return sum(vm["cpu_usage"] for vm in vms) / len(vms)
 
+@app.route('/metrics')
+def metrics():
+    return make_wsgi_app()
+
+def broadcast_metrics_loop():
+    """Background thread to broadcast metrics to all connected clients."""
+    while True:
+        try:
+            socketio.emit('metrics_update', manager.get_metrics())
+            time.sleep(1)  # Update every second
+        except Exception as e:
+            print(f"Error broadcasting metrics: {e}")
+            time.sleep(5)  # Wait longer if there's an error
+
 @app.route('/health')
 def health_check():
     return jsonify({"status": "healthy", "timestamp": time.time()})
 
-if __name__ == "__main__":
-    # Start the metrics updater thread
-    metrics_thread.start()
+def start_monitoring_async():
+    """Start the monitoring stack in a separate thread."""
+    print("\n🔄 Starting monitoring stack in background...")
+    try:
+        if start_monitoring_stack():
+            print("✅ Monitoring stack started successfully")
+            print("   - Grafana: http://localhost:3000 (admin/admin)")
+            print("   - Prometheus: http://localhost:9090")
+        else:
+            print("⚠️  Could not start monitoring stack. The application will continue without monitoring.")
+            print("   Make sure Docker Desktop is installed and running if you want to use monitoring features.")
+    except Exception as e:
+        print(f"❌ Error in monitoring thread: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == '__main__':
+    print("🚀 Starting CloudFlash...")
+    print("🔗 Access the application at: http://localhost:5000")
     
-    # Start the SocketIO server
-    print("Starting CloudFlash server with Prometheus metrics at /metrics")
-    print("Health check available at /health")
-    print("Grafana dashboard can be connected to http://localhost:5000/metrics")
+    # Check if monitoring should be started
+    if MONITORING_DIR.exists() and DOCKER_COMPOSE_FILE.exists():
+        # Start monitoring in a separate thread
+        monitoring_thread = threading.Thread(target=start_monitoring_async, daemon=True)
+        monitoring_thread.start()
+    else:
+        print("ℹ️  Monitoring stack not found. Running without monitoring.")
+        if not MONITORING_DIR.exists():
+            print(f"   - Missing directory: {MONITORING_DIR}")
+        if not DOCKER_COMPOSE_FILE.exists():
+            print(f"   - Missing file: {DOCKER_COMPOSE_FILE}")
     
-    socketio.run(app, debug=True, port=5000, use_reloader=False)
+    # Start the background thread for broadcasting metrics
+    try:
+        metrics_thread = threading.Thread(target=broadcast_metrics_loop, daemon=True)
+        metrics_thread.start()
+        print("📊 Metrics broadcasting started")
+    except Exception as e:
+        print(f"⚠️  Failed to start metrics broadcasting: {e}")
+    
+    try:
+        # Start the Flask development server
+        print("\nStarting server...")
+        print("   - Application: http://localhost:5000")
+        print("   - Stop the server with CTRL+C")
+        socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    except KeyboardInterrupt:
+        print("\n🛑 Shutting down gracefully...")
+    except Exception as e:
+        print(f"\n❌ An error occurred: {e}")
+    finally:
+        # Ensure monitoring stack is stopped when the application exits
+        if MONITORING_DIR.exists() and DOCKER_COMPOSE_FILE.exists():
+            print("\n🛑 Stopping monitoring stack...")
+            try:
+                subprocess.run(
+                    ['docker-compose', '-f', str(DOCKER_COMPOSE_FILE), 'down'],
+                    cwd=str(MONITORING_DIR),
+                    capture_output=True,
+                    text=True
+                )
+                print("✅ Monitoring stack stopped")
+            except Exception as e:
+                print(f"❌ Error stopping monitoring stack: {e}")

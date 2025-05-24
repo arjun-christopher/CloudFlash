@@ -1,34 +1,33 @@
 # 🌩️ CloudFlash - Mini-Project
 
-A cloud resource management system with real-time monitoring, auto-scaling capabilities, and comprehensive observability using Prometheus and Grafana.
+A comprehensive cloud resource management system with real-time monitoring, auto-scaling capabilities, and full observability using Prometheus and Grafana. CloudFlash provides an intuitive interface for managing virtual machines (VMs) and cloudlets with advanced resource allocation and monitoring features.
 
 ## Features
 
-### VM Management
-- Create and delete virtual machines
-- Configure VM resources (CPU, RAM, Storage, Bandwidth, GPU)
-- Monitor VM status and resource utilization
+### Virtual Machine Management
+- Create and manage virtual machines with custom resource allocations
+- Configure CPU, RAM, storage, bandwidth, and GPU resources
+- Real-time monitoring of VM performance and health
+- Clean up idle resources automatically
 
 ### Cloudlet Management
-- Submit and manage cloudlets (compute tasks)
-- Set SLA priorities and deadlines
-- Track cloudlet status and resource usage
+- Submit compute tasks with specific resource requirements
+- Set SLA priorities and execution deadlines
+- Track cloudlet lifecycle from submission to completion
+- Monitor resource consumption per cloudlet
 
 ### Real-time Monitoring & Observability
-- Live dashboard with resource utilization metrics
-- CPU, RAM, storage, bandwidth, and GPU usage visualization
-- Auto-scaling status monitoring
-- Cloudlet deadline countdown
-- Integration with Prometheus and Grafana
-- Per-VM resource tracking
-- Historical metrics and trends
+- Interactive dashboard with live metrics
+- CPU, memory, storage, and network visualization
+- Auto-scaling status and alerts
+- Cloudlet execution tracking with countdown timers
+- Deep integration with Prometheus and Grafana
 
-### Auto-scaling
-- Automatic VM scaling based on resource utilization
-- Scale up when utilization exceeds 80%
-- Scale down when utilization drops below 20%
-- Cooldown period to prevent rapid scaling
-- Idle VM removal after 2 minutes of inactivity
+### Auto-scaling & Optimization
+- Automatic scaling based on resource thresholds (80% scale up, 20% scale down)
+- Configurable cooldown periods to prevent rapid scaling
+- Automatic cleanup of idle VMs after 2 minutes
+- Resource optimization recommendations
 
 ## Setup
 
@@ -73,57 +72,156 @@ The CloudFlash monitoring dashboard includes the following panels:
 5. **Bandwidth Usage by VM** - Tracks network bandwidth usage
 6. **GPU Usage by VM** - Tracks GPU utilization (if available)
 
-## Usage
+## 🚀 Getting Started
 
-### VM Management
-- Create VMs through the dashboard interface
-- Configure resources (CPU, RAM, Storage, Bandwidth, GPU)
-- Monitor VM status and resource usage
-- Delete idle VMs
+### Creating Virtual Machines
+1. Navigate to the VM Creation panel
+2. Configure VM resources:
+   - CPU Cores (1-32)
+   - RAM (1GB-256GB)
+   - Storage (10GB-10TB)
+   - Bandwidth (10Mbps-10Gbps)
+   - GPU Units (optional)
+3. Click "Create VM" to deploy
+4. Monitor resource usage in real-time
 
-### Cloudlet Management
-- Submit cloudlets with resource requirements
-- Set SLA priorities (1-3)
-- Define deadlines for cloudlets
-- Monitor cloudlet status and progress
+### Submitting Cloudlets
+1. Go to the Cloudlet Submission panel
+2. Enter cloudlet details:
+   - Name (for identification)
+   - Resource requirements
+   - SLA Priority (1-3)
+   - Deadline (in seconds)
+3. Click "Submit Cloudlet" to queue for execution
+4. Track progress in the Cloudlet List
 
-## Customizing Metrics
+### Monitoring Resources
+- View real-time metrics in the dashboard
+- Check the system log for events and alerts
+- Access detailed metrics in Grafana (http://localhost:3000)
+- Monitor system health at `/health` endpoint
 
-### Adding New Metrics
-1. In `app.py`:
-   ```python
-   from prometheus_client import Gauge
-   
-   # Define a new gauge
-   CUSTOM_METRIC = Gauge('custom_metric', 'Description of the custom metric')
-   
-   # Update the metric value
-   CUSTOM_METRIC.set(42)
+### Auto-scaling
+- The system automatically scales based on resource utilization
+- Scale-up triggers at 80% resource usage
+- Scale-down occurs below 20% utilization
+- Idle VMs are automatically removed after 2 minutes
+
+## 🛠️ Advanced Configuration
+
+### Custom Metrics
+Add custom metrics to track additional system parameters:
+
+```python
+# In app.py
+from prometheus_client import Gauge, Counter, Histogram
+
+# Example: Track custom application metrics
+CUSTOM_METRIC = Gauge('app_custom_metric', 'Description of your custom metric')
+REQUEST_COUNTER = Counter('app_requests_total', 'Total number of requests')
+LATENCY_HISTOGRAM = Histogram('app_request_latency_seconds', 'Request latency in seconds')
+
+# Update metrics in your route handlers
+@app.route('/api/endpoint')
+def my_endpoint():
+    start_time = time.time()
+    # Your endpoint logic here
+    LATENCY_HISTOGRAM.observe(time.time() - start_time)
+    REQUEST_COUNTER.inc()
+    return jsonify({"status": "success"})
+```
+
+### Grafana Dashboard Customization
+1. **Access Grafana**: http://localhost:3000
+   - Default credentials: admin/admin (change on first login)
+
+2. **Import Dashboards**:
+   - Navigate to Dashboards > Import
+   - Upload dashboard JSON files from `cloudflash/monitoring/grafana/dashboards/`
+
+3. **Create Custom Panels**:
+   - Click "+" to add a new panel
+   - Select Prometheus as the data source
+   - Use PromQL queries to visualize metrics
+   - Example: `rate(cloudflash_http_requests_total[5m])`
+
+### Alert Configuration
+1. **In Grafana**:
+   - Go to Alerting > Alert rules
+   - Create new alert rules based on Prometheus metrics
+   - Set up notification channels (Email, Slack, etc.)
+
+2. **Example Alert Rules**:
+   - High CPU usage: `avg(rate(cloudflash_cpu_usage_percent[5m])) by (instance) > 80`
+   - Memory pressure: `avg(cloudflash_memory_usage_bytes / cloudflash_memory_total_bytes * 100) by (instance) > 75`
+
+## 🐛 Troubleshooting Guide
+
+### Monitoring Stack Issues
+
+#### Prometheus Not Scraping Metrics
+```
+# Check Prometheus targets
+http://localhost:9090/targets
+
+# Verify CloudFlash is listed as UP
+# If DOWN, check:
+# 1. Is the app running? (http://localhost:5000/health)
+# 2. Are the host and port correct in prometheus.yml?
+# 3. Is there a firewall blocking the connection?
+```
+
+#### Grafana Dashboard Issues
+1. **No Data in Panels**
+   - Check the time range selector (top-right)
+   - Verify Prometheus is selected as the data source
+   - Check for errors in the browser console (F12)
+
+2. **Missing Dashboards**
+   - Ensure dashboards are imported to Grafana
+   - Check provisioning logs in Grafana container:
+     ```bash
+     docker logs $(docker ps -q --filter name=grafana)
+     ```
+
+### Application Issues
+
+#### High Resource Usage
+```yaml
+# In monitoring/prometheus/prometheus.yml
+global:
+  scrape_interval: 15s  # Increase to reduce load
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+```
+
+#### Monitoring Stack Not Starting
+1. Check Docker logs:
+   ```bash
+   cd cloudflash/monitoring
+   docker-compose -f docker-compose.monitoring.yml logs
    ```
 
-### Updating the Dashboard
-1. Access Grafana at http://localhost:3000
-2. Navigate to the CloudFlash dashboard
-3. Click on the panel title and select "Edit"
-4. Modify the query or visualization as needed
-5. Click "Save" to update the dashboard
+2. Verify Docker is running:
+   ```bash
+   docker info
+   ```
 
-## Troubleshooting
+3. Check port conflicts:
+   ```bash
+   # Linux/macOS
+   lsof -i :3000 -i :9090 -i :5000
+   
+   # Windows
+   netstat -ano | findstr "3000 9090 5000"
+   ```
 
-### Metrics not showing up in Prometheus
-- Ensure the CloudFlash app is running and accessible
-- Check the Prometheus targets page at http://localhost:9090/targets
-- Verify the `prometheus.yml` configuration points to the correct host and port
+### Common Errors
+- **"Connection refused" errors**: Ensure all services are running and ports are available
+- **Missing metrics**: Verify metrics are being exposed at `/metrics`
+- **Permission issues**: Run Docker commands with appropriate permissions
 
-### Grafana not showing data
-- Check that the Prometheus data source is correctly configured in Grafana
-- Verify the time range in the dashboard is appropriate
-- Check the Grafana logs for any errors
-
-### High resource usage
-- The monitoring stack can be resource-intensive
-- Consider adjusting the scrape interval in `prometheus.yml`
-- Reduce the retention period for metrics in Prometheus if needed
+For additional help, please [open an issue](https://github.com/yourusername/CloudFlash/issues) with details about your environment and the error messages you're seeing.
 
 ## Cleaning Up
 
@@ -135,18 +233,41 @@ docker-compose -f docker-compose.monitoring.yml down -v
 
 This will remove the containers and volumes but keep your configuration files.
 
-## Technical Details
+## 🛠️ Technical Architecture
 
-- **Backend**: Python Flask with SocketIO for real-time updates
-- **Frontend**: HTML5, CSS3, JavaScript
-- **Real-time Updates**: WebSocket communication
-- **Auto-scaling**: Thread-based monitoring with cooldown periods
-- **Resource Allocation**: Best-fit algorithm for cloudlet placement
-- **Monitoring**:
-  - Prometheus for metrics collection
-  - Grafana for visualization
-  - Custom metrics for VM and cloudlet resources
-  - Health check endpoints at `/health` and `/metrics`
+### Backend
+- **Framework**: Python Flask with SocketIO
+- **Real-time Updates**: WebSocket communication for live metrics
+- **API**: RESTful endpoints for resource management
+- **Metrics**: Prometheus client integration
+- **Health Checks**: Built-in health monitoring at `/health`
+
+### Frontend
+- **UI**: Responsive design with modern CSS
+- **Visualization**: Dynamic charts using Chart.js
+- **Real-time Updates**: Automatic refresh of metrics and status
+
+### Monitoring Stack
+- **Prometheus**: Time-series database for metrics storage
+- **Grafana**: Visualization and dashboarding
+- **Custom Metrics**:
+  - VM resource usage
+  - Cloudlet execution metrics
+  - System health indicators
+  - Auto-scaling events
+
+### Resource Management
+- **VM Management**: Create, monitor, and scale virtual machines
+- **Cloudlet Scheduler**: Intelligent task allocation
+- **Auto-scaling**: Dynamic resource adjustment based on load
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+- Flask and Flask-SocketIO for the web framework
+- Prometheus and Grafana for monitoring
+- Chart.js for visualizations
 
 ---
 

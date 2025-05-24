@@ -5,12 +5,90 @@ body {
     margin: 0;
     padding: 0;
 }
+.header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.header-title {
+    text-align: left;
+}
+
 header {
     background: linear-gradient(90deg, #1976d2 60%, #63a4ff 100%);
     color: #fff;
     padding: 24px 0 12px 0;
-    text-align: center;
     box-shadow: 0 2px 8px #1976d244;
+}
+
+.monitoring-links {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.monitoring-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    text-decoration: none;
+    color: white;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.monitoring-link:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.monitoring-link .icon {
+    font-size: 1.1em;
+}
+
+.grafana {
+    background-color: #0092f4;
+}
+
+.prometheus {
+    background-color: #0092f4;
+}
+
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .header-title {
+        text-align: center;
+        margin-bottom: 16px;
+    }
+    
+    .monitoring-links {
+        width: 100%;
+    }
+    
+    .dashboard-row {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .dashboard-card {
+        min-width: 100%;
+        margin: 0;
+    }
 }
 main {
     padding: 24px;
@@ -66,7 +144,10 @@ main {
     padding: 16px;
     flex: 1;
     min-width: 400px;
-    margin: -12px;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Allows the card to shrink below its content's minimum size */
 }
 .dashboard-card h3 {
     color: #1565c0;
@@ -76,10 +157,13 @@ main {
     background: #e3f0ff;
     border-radius: 8px;
     padding: 12px;
-    height: 180px;
     overflow-y: auto;
     font-size: 0.95em;
     color: #0d47a1;
+    flex-grow: 1;
+    min-height: 350px;
+    max-height: 500px;
+    border: 1px solid #90caf9;
 }
 footer {
     text-align: center;
