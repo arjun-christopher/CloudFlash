@@ -5,9 +5,15 @@ global:
 scrape_configs:
   - job_name: 'cloudflash'
     static_configs:
-      - targets: ['host.docker.internal:5000']  # For Docker on Windows
+      - targets: ['192.168.1.38:5000']  # Replace <YOUR_IP> with your host's IP
     metrics_path: '/metrics'
     scheme: 'http'
+    tls_config:
+      insecure_skip_verify: true
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __address__
+        replacement: 'host.docker.internal:5000'  # For internal container DNS
 
   - job_name: 'prometheus'
     static_configs:

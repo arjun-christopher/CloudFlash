@@ -6,36 +6,12 @@ services:
     container_name: prometheus
     restart: unless-stopped
     volumes:
-      - ./prometheus:/etc/prometheus
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     networks:
       - monitoring
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    restart: unless-stopped
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    ports:
-      - "3000:3000"
-    networks:
-      - monitoring
-    depends_on:
-      - prometheus
 
 networks:
   monitoring:
@@ -43,4 +19,3 @@ networks:
 
 volumes:
   prometheus_data:
-  grafana_data:

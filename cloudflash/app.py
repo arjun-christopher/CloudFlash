@@ -1,21 +1,50 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from core import ResourceManager, VM, Cloudlet
-import time
 from flask_socketio import SocketIO, emit
-import threading
 from prometheus_client import make_wsgi_app, Gauge, Counter, Histogram
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
-from werkzeug.serving import run_simple
-import psutil
-import os
-import subprocess
+import threading
+import json
 import atexit
 import signal
 import sys
+import subprocess
+import traceback
+import socket
+import requests
+import psutil
+import os
 from pathlib import Path
+import time
 
-# Global variable to store the monitoring process
+# Initialize Flask and SocketIO
+app = Flask(__name__)
+socketio = SocketIO(app)
+
+# Initialize resource manager
+manager = ResourceManager()
+
+# Monitoring configuration
+MONITORING_DIR = Path(__file__).parent / 'monitoring'
+DOCKER_COMPOSE_FILE = MONITORING_DIR / 'docker-compose.monitoring.yml'
 monitoring_process = None
+
+# Prometheus metrics
+VM_GAUGE = Gauge('vm_count', 'Number of active VMs')
+CLOUDLET_GAUGE = Gauge('cloudlet_count', 'Number of active Cloudlets')
+CPU_USAGE = Gauge('cpu_usage_percent', 'CPU usage percentage', ['vm_id'])
+MEMORY_USAGE = Gauge('memory_usage_mb', 'Memory usage in MB', ['vm_id'])
+STORAGE_USAGE = Gauge('storage_usage_gb', 'Storage usage in GB', ['vm_id'])
+BANDWIDTH_USAGE = Gauge('bandwidth_usage_mbps', 'Bandwidth usage in Mbps', ['vm_id'])
+GPU_USAGE = Gauge('gpu_usage_percent', 'GPU usage percentage', ['vm_id'])
+
+# Add prometheus wsgi middleware to route /metrics requests
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+    '/metrics': make_wsgi_app()
+})
+
+# Set up metrics callback
+manager.set_metrics_callback(lambda: socketio.emit('metrics_update', manager.get_metrics()))
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
@@ -75,34 +104,15 @@ def start_monitoring_stack():
             return False
             
         print("✅ Docker is running")
-        
-        # Get the absolute paths
-        monitoring_dir = str(MONITORING_DIR.absolute())
-        docker_compose_path = str(DOCKER_COMPOSE_FILE.absolute())
-        
-        print(f"📂 Monitoring directory: {monitoring_dir}")
-        print(f"📄 Using compose file: {docker_compose_path}")
-        
-        # Stop any existing containers first
-        print("🛑 Stopping any existing monitoring containers...")
-        stop_result = _run_monitoring_command(['down', '--remove-orphans'])
-        
-        # Start the monitoring containers
-        print("🚀 Starting monitoring stack...")
+        print("=== Starting monitoring stack...")
         start_result = _run_monitoring_command(['up', '-d'])
-        
         if start_result and start_result.returncode == 0:
-            print("✅ Monitoring stack started successfully")
-            print("   - Grafana: http://localhost:3000 (admin/admin)")
-            print("   - Prometheus: http://localhost:9090")
+            print("✅ Monitoring stack started")
             return True
         else:
-            print("❌ Failed to start monitoring stack")
-            if start_result:
-                if start_result.stdout:
-                    print("=== STDOUT ===\n", start_result.stdout)
-                if start_result.stderr:
-                    print("=== STDERR ===\n", start_result.stderr)
+            print("=== STDOUT ===\n", start_result.stdout)
+            if start_result.stderr:
+                print("=== STDERR ===\n", start_result.stderr)
             return False
             
     except Exception as e:
@@ -126,50 +136,6 @@ def stop_monitoring():
             print("\n🛑 Monitoring stack stopped and cleaned up.")
         except Exception as e:
             print(f"❌ Error stopping monitoring stack: {e}")
-
-def cleanup():
-    """Cleanup function to be called on exit."""
-    stop_monitoring()
-    print("\n👋 Goodbye!")
-
-# Register cleanup function
-atexit.register(cleanup)
-
-def signal_handler(sig, frame):
-    """Handle interrupt signals."""
-    print("\n🛑 Received interrupt signal. Cleaning up...")
-    cleanup()
-    sys.exit(0)
-
-# Register signal handlers
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
-# Initialize Flask app and SocketIO
-app = Flask(__name__)
-socketio = SocketIO(app)
-
-# Initialize resource manager
-manager = ResourceManager()
-manager.set_metrics_callback(lambda: socketio.emit('metrics_update', manager.get_metrics()))
-
-# Prometheus metrics
-REQUEST_TIME = Histogram('request_latency_seconds', 'Request latency in seconds',
-                       ['endpoint', 'method'])
-VM_GAUGE = Gauge('vm_count', 'Number of active VMs')
-CLOUDLET_GAUGE = Gauge('cloudlet_count', 'Number of active cloudlets')
-CPU_USAGE = Gauge('cpu_usage_percent', 'CPU usage percentage', ['vm_id'])
-MEMORY_USAGE = Gauge('memory_usage_mb', 'Memory usage in MB', ['vm_id'])
-STORAGE_USAGE = Gauge('storage_usage_gb', 'Storage usage in GB', ['vm_id'])
-BANDWIDTH_USAGE = Gauge('bandwidth_usage_mbps', 'Bandwidth usage in Mbps', ['vm_id'])
-GPU_USAGE = Gauge('gpu_usage_percent', 'GPU usage percentage', ['vm_id'])
-
-# Add prometheus wsgi middleware to route /metrics requests
-app.wsgi_app = DispatcherMiddleware(
-    app.wsgi_app, {
-        '/metrics': make_wsgi_app()
-    }
-)
 
 def update_prometheus_metrics():
     """Update Prometheus metrics with current resource usage"""
@@ -209,43 +175,115 @@ def index():
         start_monitoring_stack()
     return render_template('index.html', 
                          vms=manager.get_vms(), 
-                         cloudlets=manager.get_cloudlets(),
                          metrics=manager.get_metrics())
-
-@app.route('/monitoring')
-def monitoring():
-    """Redirect to Grafana dashboard with fallback."""
-    try:
-        # Try to check if Grafana is accessible
-        import socket
-        socket.create_connection(('localhost', 3000), timeout=1)
-        return redirect('http://localhost:3000')
-    except (socket.error, OSError):
-        return """
-        <html>
-        <head><title>CloudFlash</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-            <h1>⚠️ Grafana Not Running</h1>
-            <p>Grafana is not currently running. To enable monitoring:</p>
-            <ol style="text-align: left; max-width: 600px; margin: 20px auto;">
-                <li>Install Docker Desktop from <a href="https://www.docker.com/products/docker-desktop/" target="_blank">docker.com</a></li>
-                <li>Start Docker Desktop</li>
-                <li>Restart the CloudFlash application</li>
-            </ol>
-            <p><a href="/">← Back to CloudFlash</a></p>
-        </body>
-        </html>
-        """, 503
 
 @app.route('/prometheus')
 def prometheus():
-    """Redirect to Prometheus UI with fallback."""
+    prometheus_url = 'http://localhost:9090'
+    
     try:
-        # Try to check if Prometheus is accessible
-        import socket
-        socket.create_connection(('localhost', 9090), timeout=1)
-        return redirect('http://localhost:9090')
-    except (socket.error, OSError):
+        # Initialize query parameters
+        query_params = []
+        
+        # List of queries to execute with their labels
+        queries = [
+            # Resource Counts
+            {'expr': 'vm_count', 'label': 'Total VMs', 'unit': 'count'},
+            {'expr': 'cloudlet_count', 'label': 'Total Cloudlets', 'unit': 'count'},
+            
+            # CPU Metrics
+            {'expr': 'avg(cpu_usage_percent)', 'label': 'Average CPU Usage', 'unit': '%'},
+            {'expr': 'max(cpu_usage_percent)', 'label': 'Peak CPU Usage', 'unit': '%'},
+            {'expr': 'min(cpu_usage_percent)', 'label': 'Lowest CPU Usage', 'unit': '%'},
+            
+            # Memory Metrics
+            {'expr': 'avg(memory_usage_mb)', 'label': 'Average Memory Usage', 'unit': 'MB'},
+            {'expr': 'max(memory_usage_mb)', 'label': 'Peak Memory Usage', 'unit': 'MB'},
+            {'expr': 'min(memory_usage_mb)', 'label': 'Lowest Memory Usage', 'unit': 'MB'},
+            
+            # Storage Metrics
+            {'expr': 'avg(storage_usage_gb)', 'label': 'Average Storage Usage', 'unit': 'GB'},
+            {'expr': 'max(storage_usage_gb)', 'label': 'Peak Storage Usage', 'unit': 'GB'},
+            {'expr': 'min(storage_usage_gb)', 'label': 'Lowest Storage Usage', 'unit': 'GB'},
+            
+            # Bandwidth Metrics
+            {'expr': 'avg(bandwidth_usage_mbps)', 'label': 'Average Bandwidth', 'unit': 'Mbps'},
+            {'expr': 'max(bandwidth_usage_mbps)', 'label': 'Peak Bandwidth', 'unit': 'Mbps'},
+            {'expr': 'min(bandwidth_usage_mbps)', 'label': 'Lowest Bandwidth', 'unit': 'Mbps'},
+            
+            # GPU Metrics
+            {'expr': 'avg(gpu_usage_percent)', 'label': 'Average GPU Usage', 'unit': '%'},
+            {'expr': 'max(gpu_usage_percent)', 'label': 'Peak GPU Usage', 'unit': '%'},
+            {'expr': 'min(gpu_usage_percent)', 'label': 'Lowest GPU Usage', 'unit': '%'},
+            
+            # Resource Utilization
+            {'expr': 'rate(vm_count[5m])', 'label': 'VM Creation Rate', 'unit': 'VMs/5min'}
+        ]
+        
+        # Add proper formatting for each query
+        for i, query in enumerate(queries):
+            # Basic query parameters
+            query_params.append(f'g{i}.expr={query["expr"]}')
+            query_params.append(f'g{i}.tab=0')
+            query_params.append(f'g{i}.title={query["label"]}')
+            query_params.append(f'g{i}.range_input=1h')
+            query_params.append(f'g{i}.step=15')
+            query_params.append(f'g{i}.end=')
+            query_params.append(f'g{i}.start=1h')
+            
+            # Display settings
+            query_params.append(f'g{i}.width=1200')
+            query_params.append(f'g{i}.height=250')
+            query_params.append(f'g{i}.grid=1')
+            query_params.append(f'g{i}.show_legend=1')
+            query_params.append(f'g{i}.tooltip=1')
+            query_params.append(f'g{i}.legendFormat={query["label"]}')
+            
+            # Axis settings
+            query_params.append(f'g{i}.yaxis=left')
+            query_params.append(f'g{i}.yaxis_label={query["label"]}')
+            query_params.append(f'g{i}.yaxis_unit={query.get("unit", "")}')
+            query_params.append(f'g{i}.yaxis_min=0')
+            if query["label"].startswith("Average"):
+                query_params.append(f'g{i}.yaxis_max=100')
+            else:
+                query_params.append(f'g{i}.yaxis_max=')
+            
+            # Formatting
+            query_params.append(f'g{i}.format={query.get("unit", "")}')
+            query_params.append(f'g{i}.minspan=1')
+            query_params.append(f'g{i}.maxspan=1')
+        for i, query in enumerate(queries):
+            query_params.append(f'g{i}.expr={query["expr"]}')
+            query_params.append(f'g{i}.tab=0')
+            query_params.append(f'g{i}.title={query["label"]}')
+        
+        # Create the final URL with all parameters
+        query_url = f"{prometheus_url}/graph?{'&'.join(query_params)}"
+            
+        # Try to access Prometheus to verify it's running
+        response = requests.get(f'{prometheus_url}/api/v1/query', params={'query': 'vm_count'}, timeout=2)
+        if response.status_code == 200:
+            # Create a dashboard URL with all queries
+            dashboard_url = f"{prometheus_url}/graph?{query_url}"
+            return redirect(dashboard_url)
+        else:
+            return """
+            <html>
+            <head><title>CloudFlash</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1>⚠️ Prometheus Not Running</h1>
+                <p>Prometheus is not currently running. To enable monitoring:</p>
+                <ol style="text-align: left; max-width: 600px; margin: 20px auto;">
+                    <li>Install Docker Desktop from <a href="https://www.docker.com/products/docker-desktop/" target="_blank">docker.com</a></li>
+                    <li>Start Docker Desktop</li>
+                    <li>Restart the CloudFlash application</li>
+                </ol>
+                <p><a href="/">← Back to CloudFlash</a></p>
+            </body>
+            </html>
+            """, 503
+    except (requests.exceptions.RequestException, socket.error, OSError):
         return """
         <html>
         <head><title>CloudFlash</title><meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -405,38 +443,26 @@ def broadcast_metrics_loop():
 def health_check():
     return jsonify({"status": "healthy", "timestamp": time.time()})
 
-def start_monitoring_async():
-    """Start the monitoring stack in a separate thread."""
-    print("\n🔄 Starting monitoring stack in background...")
-    try:
-        if start_monitoring_stack():
-            print("✅ Monitoring stack started successfully")
-            print("   - Grafana: http://localhost:3000 (admin/admin)")
-            print("   - Prometheus: http://localhost:9090")
-        else:
-            print("⚠️  Could not start monitoring stack. The application will continue without monitoring.")
-            print("   Make sure Docker Desktop is installed and running if you want to use monitoring features.")
-    except Exception as e:
-        print(f"❌ Error in monitoring thread: {e}")
-        import traceback
-        traceback.print_exc()
-
-if __name__ == '__main__':
-    print("🚀 Starting CloudFlash...")
-    print("🔗 Access the application at: http://localhost:5000")
-    
-    # Check if monitoring should be started
+def monitoring():
+    """Start monitoring stack if it exists."""
     if MONITORING_DIR.exists() and DOCKER_COMPOSE_FILE.exists():
-        # Start monitoring in a separate thread
-        monitoring_thread = threading.Thread(target=start_monitoring_async, daemon=True)
-        monitoring_thread.start()
+        print("🚀 Starting monitoring stack...")
+        print("   - Prometheus: http://localhost:9090")
+        start_monitoring_stack()
     else:
         print("ℹ️  Monitoring stack not found. Running without monitoring.")
         if not MONITORING_DIR.exists():
             print(f"   - Missing directory: {MONITORING_DIR}")
         if not DOCKER_COMPOSE_FILE.exists():
             print(f"   - Missing file: {DOCKER_COMPOSE_FILE}")
-    
+
+        sys.exit(1)
+
+if __name__ == '__main__':
+    print("🚀 Starting CloudFlash...")
+    print("🔗 Access the application at: http://localhost:5000")
+    monitoring()
+
     # Start the background thread for broadcasting metrics
     try:
         metrics_thread = threading.Thread(target=broadcast_metrics_loop, daemon=True)
@@ -444,28 +470,13 @@ if __name__ == '__main__':
         print("📊 Metrics broadcasting started")
     except Exception as e:
         print(f"⚠️  Failed to start metrics broadcasting: {e}")
-    
+        sys.exit(1)
+
     try:
-        # Start the Flask development server
-        print("\nStarting server...")
-        print("   - Application: http://localhost:5000")
-        print("   - Stop the server with CTRL+C")
-        socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+        socketio.run(app, host='0.0.0.0', port=5000)
     except KeyboardInterrupt:
-        print("\n🛑 Shutting down gracefully...")
+        print("\n👋 Goodbye!")
+        sys.exit(0)
     except Exception as e:
-        print(f"\n❌ An error occurred: {e}")
-    finally:
-        # Ensure monitoring stack is stopped when the application exits
-        if MONITORING_DIR.exists() and DOCKER_COMPOSE_FILE.exists():
-            print("\n🛑 Stopping monitoring stack...")
-            try:
-                subprocess.run(
-                    ['docker-compose', '-f', str(DOCKER_COMPOSE_FILE), 'down'],
-                    cwd=str(MONITORING_DIR),
-                    capture_output=True,
-                    text=True
-                )
-                print("✅ Monitoring stack stopped")
-            except Exception as e:
-                print(f"❌ Error stopping monitoring stack: {e}")
+        print(f"❌ Error running application: {e}")
+        sys.exit(1)

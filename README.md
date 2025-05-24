@@ -21,7 +21,7 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 - CPU, memory, storage, and network visualization
 - Auto-scaling status and alerts
 - Cloudlet execution tracking with countdown timers
-- Deep integration with Prometheus and Grafana
+- Deep integration with Prometheus for monitoring
 
 ### Auto-scaling & Optimization
 - Automatic scaling based on resource thresholds (80% scale up, 20% scale down)
@@ -56,9 +56,6 @@ A comprehensive cloud resource management system with real-time monitoring, auto
    docker-compose -f docker-compose.monitoring.yml up -d
    ```
 3. Access the monitoring tools:
-   - **Grafana Dashboard**: http://localhost:3000
-     - Username: `admin`
-     - Password: `admin`
    - **Prometheus**: http://localhost:9090
    - **CloudFlash App**: http://localhost:5000
 
@@ -71,6 +68,8 @@ The CloudFlash monitoring dashboard includes the following panels:
 4. **Memory Usage by VM** - Tracks memory usage for each VM
 5. **Bandwidth Usage by VM** - Tracks network bandwidth usage
 6. **GPU Usage by VM** - Tracks GPU utilization (if available)
+
+Access these metrics through Prometheus at http://localhost:9090
 
 ## 🚀 Getting Started
 
@@ -131,24 +130,14 @@ def my_endpoint():
     return jsonify({"status": "success"})
 ```
 
-### Grafana Dashboard Customization
-1. **Access Grafana**: http://localhost:3000
-   - Default credentials: admin/admin (change on first login)
-
-2. **Import Dashboards**:
-   - Navigate to Dashboards > Import
-   - Upload dashboard JSON files from `cloudflash/monitoring/grafana/dashboards/`
-
-3. **Create Custom Panels**:
-   - Click "+" to add a new panel
-   - Select Prometheus as the data source
+### Prometheus Customization
+1. **Access Prometheus**: http://localhost:9090
    - Use PromQL queries to visualize metrics
    - Example: `rate(cloudflash_http_requests_total[5m])`
 
 ### Alert Configuration
-1. **In Grafana**:
-   - Go to Alerting > Alert rules
-   - Create new alert rules based on Prometheus metrics
+1. **In Prometheus**:
+   - Create alert rules in prometheus.yml
    - Set up notification channels (Email, Slack, etc.)
 
 2. **Example Alert Rules**:
@@ -171,17 +160,13 @@ http://localhost:9090/targets
 # 3. Is there a firewall blocking the connection?
 ```
 
-#### Grafana Dashboard Issues
-1. **No Data in Panels**
+#### Prometheus Issues
+1. **No Data in Graphs**
    - Check the time range selector (top-right)
-   - Verify Prometheus is selected as the data source
-   - Check for errors in the browser console (F12)
-
-2. **Missing Dashboards**
-   - Ensure dashboards are imported to Grafana
-   - Check provisioning logs in Grafana container:
+   - Verify the PromQL query is correct
+   - Check for errors in the Prometheus logs:
      ```bash
-     docker logs $(docker ps -q --filter name=grafana)
+     docker logs $(docker ps -q --filter name=prometheus)
      ```
 
 ### Application Issues
