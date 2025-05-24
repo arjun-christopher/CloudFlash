@@ -148,6 +148,6 @@ This will remove the containers and volumes but keep your configuration files.
   - Custom metrics for VM and cloudlet resources
   - Health check endpoints at `/health` and `/metrics`
 
-## Last Modified
+---
 
 Last updated: May 24, 2025
