@@ -3,6 +3,12 @@ Flask==3.1.0
 Flask-SocketIO==5.5.1
 Jinja2==3.1.6
 Werkzeug==3.1.3
+psutil==5.9.5
+
+# Monitoring
+prometheus-client==0.20.0
+prometheus-flask-exporter==1.2.0
+grafana-dashboards==2.1.0
 
 # Networking
 python-socketio==5.13.0
