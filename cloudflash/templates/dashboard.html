@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CloudFlash Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            margin: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .chart-container h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        #vmChart {
+            width: 100%;
+            height: 200px;
+        }
+
+        #cloudletStatusChart {
+            width: 100%;
+            height: 200px;
+        }
+
+        .cloudlet-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .cloudlet-table th, .cloudlet-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .cloudlet-table th {
+            background-color: #f4f4f4;
+        }
+
+        .status-cell {
+            min-width: 120px;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-WAITING { background-color: #f0f0f0; color: #666; }
+        .status-PENDING { background-color: #ffd700; color: #333; }
+        .status-ACTIVE { background-color: #4caf50; color: white; }
+        .status-COMPLETED { background-color: #2196f3; color: white; }
+        .status-FAILED { background-color: #f44336; color: white; }
+
+        .chart-container canvas {
+            width: 100% !important;
+            height: auto !important;
+        }
+
+        /* Scaling Status Styles */
+        .scaling-status {
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .scaling-status.disabled {
+            background-color: #f4f4f4;
+            color: #666;
+        }
+
+        .scaling-status.active {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .utilization-display {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .utilization-item {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .metrics {
+            grid-column: span 3;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="metrics">
+            <div class="metric-card">
+                <h3>VMs</h3>
+                <p>{{ utilization.vms }} active</p>
+            </div>
+            <div class="metric-card">
+                <h3>Cloudlets</h3>
+                <p>{{ utilization.active_cloudlets }} active</p>
+                <p>{{ utilization.pending_cloudlets }} pending</p>
+            </div>
+            <div class="metric-card">
+                <h3>Resource Utilization</h3>
+                <p>CPU: {{ "%.1f"|format(metrics.used_resources.cpu) }}/{{ metrics.total_resources.cpu }}</p>
+                <p>RAM: {{ "%.1f"|format(metrics.used_resources.ram) }}/{{ metrics.total_resources.ram }} GB</p>
+                <p>Storage: {{ "%.1f"|format(metrics.used_resources.storage) }}/{{ metrics.total_resources.storage }} GB</p>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="cpuChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="ramChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="storageChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="bandwidthChart"></canvas> <!-- Confirm this -->
+        </div>
+        <div class="chart-container">
+            <canvas id="gpuChart"></canvas> <!-- Confirm this -->
+        </div>
+
+        <div class="chart-container" style="grid-column: span 3;">
+            <h3>Auto-scaling Status</h3>
+            <div id="scalingStatus" class="scaling-status disabled">Disabled</div>
+            <div id="utilizationDisplay" class="utilization-display"></div>
+        </div>
+
+        <div class="chart-container" style="grid-column: span 3;">
+            <h3>Cloudlet Status</h3>
+            <canvas id="cloudletStatusChart"></canvas>
+        </div>
+
+        <div class="chart-container" style="grid-column: span 3;">
+            <h3>Cloudlet Status</h3>
+            <table>
+                <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                    <th>Age</th>
+                </tr>
+                {% for cl in cloudlets %}
+                <tr>
+                    <td>{{ cl.name }}</td>
+                    <td>{{ cl.status }}</td>
+                    <td>{{ {1: 'Low', 2: 'Medium', 3: 'High'}[cl.sla_priority] }}</td>
+                    <td>{{ cl.age }}s</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function createChart(id, label, data, unit = '%') {
+            new Chart(document.getElementById(id), {
+                type: 'bar',
+                data: {
+                    labels: data.map(vm => vm.name),
+                    datasets: [{
+                        label: `${label} Usage (${unit})`,
+                        data: data.map(vm => vm.value),
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)'
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: `Usage (${unit})`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    
+        fetch('/api/metrics')
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to load metrics');
+                return response.json();
+            })
+            .then(metrics => {
+                const vms = metrics.vms;
+    
+                createChart('cpuChart', 'CPU', vms.map(vm => ({ name: vm.name, value: (vm.cpu_usage * 100).toFixed(1) })));
+                createChart('ramChart', 'RAM', vms.map(vm => ({ name: vm.name, value: (vm.ram_usage * 100).toFixed(1) })));
+                createChart('storageChart', 'Storage', vms.map(vm => ({ name: vm.name, value: (vm.storage_usage * 100).toFixed(1) })));
+                createChart('bandwidthChart', 'Bandwidth', vms.map(vm => ({ name: vm.name, value: (vm.bandwidth_usage * 100).toFixed(1) })), 'Mbps');
+                createChart('gpuChart', 'GPU', vms.map(vm => ({ name: vm.name, value: (vm.gpu_usage * 100).toFixed(1) })));
+            })
+            .catch(error => {
+                console.error('Error loading metrics:', error);
+                ['cpuChart', 'ramChart', 'storageChart', 'bandwidthChart', 'gpuChart'].forEach(id => {
+                    document.getElementById(id).innerHTML = `<p>Error loading ${id.replace('Chart', '')} data</p>`;
+                });
+            });
+    </script>    
+</body>
+</html>

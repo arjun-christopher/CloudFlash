@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CloudFlash</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='52' font-size='52'>🌩️</text></svg>">
+</head>
+<body>
+    <header>
+        <h1>CloudFlash 🌩️</h1>
+        <p>Dynamic IaaS Resource Allocation Simulation</p>
+    </header>
+
+    <main>
+        <section class="controls">
+            <!-- VM Creation Card -->
+            <div class="card">
+                <h2>Create VM</h2>
+                <label for="vmPreset">Preset</label>
+                <select id="vmPreset" onchange="applyPreset()">
+                    <option value="">Custom</option>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                </select>
+                <label for="vmCpu">CPU Cores</label>
+                <input type="number" id="vmCpu" placeholder="CPU Cores" min="1" value="4">
+                <div class="input-group">
+                    <label for="vmRam" style="flex:2;">RAM</label>
+                    <input type="number" id="vmRam" placeholder="RAM" min="1" value="8">
+                    <select id="vmRamUnit">
+                        <option value="1">GB</option>
+                        <option value="1024">TB</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="vmStorage" style="flex:2;">Storage</label>
+                    <input type="number" id="vmStorage" placeholder="Storage" min="1" value="100">
+                    <select id="vmStorageUnit">
+                        <option value="1">GB</option>
+                        <option value="1024">TB</option>
+                    </select>
+                </div>
+                <label for="vmBandwidth">Bandwidth (Mbps)</label>
+                <input type="number" id="vmBandwidth" placeholder="Bandwidth (Mbps)" min="1" value="1000">
+                <label for="vmGpu">GPU Units</label>
+                <input type="number" id="vmGpu" placeholder="GPU Units" min="0" value="0">
+                <button onclick="createVM()">Create VM</button>
+            </div>
+
+            <!-- Cloudlet Submission Card -->
+            <div class="card">
+                <h2>Submit Cloudlet</h2>
+                <label for="cloudletPreset">Preset</label>
+                <select id="cloudletPreset" onchange="applyCloudletPreset()">
+                    <option value="">Custom</option>
+                    <option value="light">Light</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="heavy">Heavy</option>
+                </select>
+                <label for="cloudletName">Cloudlet Name</label>
+                <input type="text" id="cloudletName" placeholder="Cloudlet Name">
+                <label for="cloudletCpu">CPU Cores</label>
+                <input type="number" id="cloudletCpu" placeholder="CPU Cores" min="1" value="2">
+                <div class="input-group">
+                    <label for="cloudletRam" style="flex:2;">RAM</label>
+                    <input type="number" id="cloudletRam" placeholder="RAM" min="1" value="4">
+                    <select id="cloudletRamUnit">
+                        <option value="1">GB</option>
+                        <option value="1024">TB</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="cloudletStorage" style="flex:2;">Storage</label>
+                    <input type="number" id="cloudletStorage" placeholder="Storage" min="1" value="10">
+                    <select id="cloudletStorageUnit">
+                        <option value="1">GB</option>
+                        <option value="1024">TB</option>
+                    </select>
+                </div>
+                <label for="cloudletBandwidth">Bandwidth (Mbps)</label>
+                <input type="number" id="cloudletBandwidth" placeholder="Bandwidth (Mbps)" min="1" value="100">
+                <label for="cloudletGpu">GPU Units</label>
+                <input type="number" id="cloudletGpu" placeholder="GPU Units" min="0" value="0">
+                <label for="cloudletSLA">SLA Priority</label>
+                <select id="cloudletSLA">
+                    <option value="1">Low Priority</option>
+                    <option value="2" selected>Medium Priority</option>
+                    <option value="3">High Priority</option>
+                </select>
+                <label for="cloudletDeadline">Deadline (sec)</label>
+                <input type="number" id="cloudletDeadline" placeholder="Deadline (sec)" min="10" value="60">
+                <button onclick="submitCloudlet()">Submit Cloudlet</button>
+            </div>
+        </section>
+
+        <section class="dashboard">
+            <div class="dashboard-row">
+                <div class="dashboard-card">
+                    <h3>VM Resource Utilization</h3>
+                    <h3>Average Utilization</h3>
+                    <div id="avgUtilBar" style="height: 20px; background: #ddd; border-radius: 10px; overflow: hidden;">
+                        <div id="avgUtilFill" style="height: 100%; width: 0%; background: green; transition: width 0.5s;"></div>
+                    </div>
+                    <p id="avgUtilPercent" style="margin-top: 5px; font-weight: bold;">0%</p>
+                    <canvas id="vmChart"></canvas>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Cloudlet Status</h3>
+                    <canvas id="cloudletChart"></canvas>
+                </div>
+            </div>
+            <div class="dashboard-row">
+                <div class="dashboard-card">
+                    <h3>SLA Compliance</h3>
+                    <canvas id="slaChart"></canvas>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Live System Log</h3>
+                    <div id="systemLog" class="log"></div>
+                </div>
+            </div>
+            <div class="dashboard-row">
+                <div class="dashboard-card">
+                    <h3>VM List</h3>
+                    <table id="vmTable">
+                        <thead>
+                            <tr>
+                                <th>Name/ID</th>
+                                <th>CPU</th>
+                                <th>RAM (GB)</th>
+                                <th>Storage (GB)</th>
+                                <th>Bandwidth (Mbps)</th>
+                                <th>GPU</th>
+                                <th>Status</th>
+                                <th>Operation</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Cloudlet List</h3>
+                    <table id="cloudletTable">
+                        <thead>
+                            <tr>
+                                <th>Name/ID</th>
+                                <th>CPU</th>
+                                <th>RAM (GB)</th>
+                                <th>Storage (GB)</th>
+                                <th>Bandwidth (Mbps)</th>
+                                <th>GPU</th>
+                                <th>Status</th>
+                                <th>Operation</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Success Popup -->
+    <div id="successPopup" class="popup" style="display:none;">
+        <span id="successPopupMsg"></span>
+    </div>
+
+    <footer>
+        <p>Powered by CloudFlash Dynamic Simulation &copy; 2025</p>
+    </footer>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
