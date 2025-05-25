@@ -19,6 +19,7 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 ### Real-time Monitoring & Observability
 - Interactive dashboard with live metrics
 - CPU, memory, storage, and network visualization
+- Memory management visualization with page-level details
 - Auto-scaling status and alerts
 - Cloudlet execution tracking with countdown timers
 - Deep integration with Prometheus for monitoring
@@ -26,8 +27,9 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 ### Auto-scaling & Optimization
 - Automatic scaling based on resource thresholds (80% scale up, 20% scale down)
 - Configurable cooldown periods to prevent rapid scaling
-- Automatic cleanup of idle VMs after 2 minutes
+- Automatic cleanup of idle VMs after 1 minute (reduced from 2 minutes)
 - Resource optimization recommendations
+- Memory fragmentation monitoring and visualization
 
 ## Setup
 
@@ -58,12 +60,36 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 ## Dashboard Overview
 
 The CloudFlash monitoring dashboard includes the following panels:
+
 1. **Active VMs** - Shows the current number of running VMs
 2. **Active Cloudlets** - Shows the current number of active cloudlets
 3. **CPU Usage by VM** - Tracks CPU usage for each VM
-4. **Memory Usage by VM** - Tracks memory usage for each VM
+4. **Memory Management** - Detailed memory metrics including:
+   - Total and free memory pages
+   - Memory fragmentation percentage
+   - Visual memory map showing page allocation
+   - Real-time updates of memory usage patterns
 5. **Bandwidth Usage by VM** - Tracks network bandwidth usage
 6. **GPU Usage by VM** - Tracks GPU utilization (if available)
+7. **System Log** - Real-time log of system events and operations
+
+### Memory Management Panel
+
+The memory management panel provides detailed insights into your system's memory usage:
+
+- **Total Pages**: Total number of memory pages available in the system
+- **Free Pages**: Number of currently available memory pages
+- **Fragmentation %**: Percentage of memory that is fragmented
+- **Memory Map**: Visual representation of memory allocation
+  - Green: Free memory
+  - Red: Used memory
+  - Yellow: Fragmented memory
+
+### Auto-scaling Behavior
+
+- **Scale Up**: Triggers when resource usage exceeds 80%
+- **Scale Down**: Occurs when usage drops below 20%
+- **Idle VM Cleanup**: Inactive VMs are automatically removed after 1 minute
 
 Access these metrics through the CloudFlash monitoring dashboard at http://localhost:5000/prometheus
 
@@ -91,7 +117,9 @@ Access these metrics through the CloudFlash monitoring dashboard at http://local
 4. Track progress in the Cloudlet List
 
 ### Monitoring Resources
-- View real-time metrics in the dashboard
+- View real-time metrics in the responsive dashboard
+- Monitor memory usage with detailed page-level visualization
+- Track fragmentation and memory allocation patterns
 - Check the system log for events and alerts
 - Access detailed metrics in the Prometheus dashboard at http://localhost:5000/prometheus
 - Monitor system health at `/health` endpoint
@@ -251,4 +279,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-Last updated: May 24, 2025
+Last updated: May 25, 2025
