@@ -130,7 +130,7 @@ header {
 }
 
 main {
-    padding: 24px -20px;
+    padding: 24px -22px;
     max-width: 100%;
     margin: 0 auto;
 }
@@ -180,7 +180,7 @@ main {
     max-width: 3000px;
     width: 100%;
     margin: 0 auto;
-    padding: 24px 40px;
+    padding: 24px 30px;
     box-sizing: border-box;
 }
 
@@ -202,7 +202,7 @@ main {
     flex: 1;
     width: 100%;
     min-width: 300px;
-    max-width: 600px;
+    max-width: 650px;
 }
 
 /* Adjust last row cards to fit 3 in a row with proper spacing */
@@ -310,8 +310,8 @@ footer {
 }
 
 .dashboard-row.table-row .dashboard-card {
-    flex: 1 1 50%;
-    max-width: 50%;
+    flex: 1 1 54%;
+    max-width: 54%;
     min-width: 600px;
     box-sizing: border-box;
     overflow-x: auto;
