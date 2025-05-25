@@ -57,12 +57,8 @@ header {
     font-size: 1.1em;
 }
 
-.grafana {
-    background-color: #0092f4;
-}
-
 .prometheus {
-    background-color: #0092f4;
+    background-color: #2949fa;  /* Prometheus orange color */
 }
 
 @media (max-width: 768px) {

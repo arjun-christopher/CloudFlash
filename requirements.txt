@@ -8,7 +8,6 @@ psutil==5.9.5
 # Monitoring
 prometheus-client==0.20.0
 prometheus-flask-exporter==1.2.0
-grafana-dashboards==2.1.0
 
 # Networking
 python-socketio==5.13.0

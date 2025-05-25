@@ -1,6 +1,6 @@
 # 🌩️ CloudFlash - Mini-Project
 
-A comprehensive cloud resource management system with real-time monitoring, auto-scaling capabilities, and full observability using Prometheus and Grafana. CloudFlash provides an intuitive interface for managing virtual machines (VMs) and cloudlets with advanced resource allocation and monitoring features.
+A comprehensive cloud resource management system with real-time monitoring, auto-scaling capabilities, and full observability using Prometheus. CloudFlash provides an intuitive interface for managing virtual machines (VMs) and cloudlets with advanced resource allocation and monitoring features.
 
 ## Features
 
@@ -46,18 +46,14 @@ A comprehensive cloud resource management system with real-time monitoring, auto
    ```
 2. Open your browser and navigate to `http://localhost:5000`
 
-### Monitoring Stack Setup
-1. Navigate to the monitoring directory:
+### Monitoring Setup
+1. Start the CloudFlash application:
    ```bash
-   cd cloudflash/monitoring
+   python -m cloudflash.app
    ```
-2. Start the monitoring stack:
-   ```bash
-   docker-compose -f docker-compose.monitoring.yml up -d
-   ```
-3. Access the monitoring tools:
-   - **Prometheus**: http://localhost:9090
-   - **CloudFlash App**: http://localhost:5000
+2. Access the monitoring dashboard at:
+   - **CloudFlash Monitoring**: http://localhost:5000/prometheus
+   - **Prometheus UI**: http://localhost:9090 (for advanced queries)
 
 ## Dashboard Overview
 
@@ -69,7 +65,7 @@ The CloudFlash monitoring dashboard includes the following panels:
 5. **Bandwidth Usage by VM** - Tracks network bandwidth usage
 6. **GPU Usage by VM** - Tracks GPU utilization (if available)
 
-Access these metrics through Prometheus at http://localhost:9090
+Access these metrics through the CloudFlash monitoring dashboard at http://localhost:5000/prometheus
 
 ## 🚀 Getting Started
 
@@ -97,7 +93,7 @@ Access these metrics through Prometheus at http://localhost:9090
 ### Monitoring Resources
 - View real-time metrics in the dashboard
 - Check the system log for events and alerts
-- Access detailed metrics in Grafana (http://localhost:3000)
+- Access detailed metrics in the Prometheus dashboard at http://localhost:5000/prometheus
 - Monitor system health at `/health` endpoint
 
 ### Auto-scaling
@@ -146,7 +142,7 @@ def my_endpoint():
 
 ## 🐛 Troubleshooting Guide
 
-### Monitoring Stack Issues
+### Monitoring Issues
 
 #### Prometheus Not Scraping Metrics
 ```
@@ -233,8 +229,7 @@ This will remove the containers and volumes but keep your configuration files.
 - **Real-time Updates**: Automatic refresh of metrics and status
 
 ### Monitoring Stack
-- **Prometheus**: Time-series database for metrics storage
-- **Grafana**: Visualization and dashboarding
+- **Prometheus**: Metrics collection, visualization, and alerting
 - **Custom Metrics**:
   - VM resource usage
   - Cloudlet execution metrics
@@ -251,7 +246,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 - Flask and Flask-SocketIO for the web framework
-- Prometheus and Grafana for monitoring
+- Prometheus for monitoring and metrics
 - Chart.js for visualizations
 
 ---
