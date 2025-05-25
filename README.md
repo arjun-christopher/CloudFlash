@@ -17,19 +17,28 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 - Monitor resource consumption per cloudlet
 
 ### Real-time Monitoring & Observability
-- Interactive dashboard with live metrics
-- CPU, memory, storage, and network visualization
-- Memory management visualization with page-level details
-- Auto-scaling status and alerts
-- Cloudlet execution tracking with countdown timers
-- Deep integration with Prometheus for monitoring
+- **Live Dashboard**: Instant updates via WebSocket
+- **Resource Visualization**: CPU, memory, storage, and network
+- **Memory Management**: Page-level allocation details
+- **Auto-scaling**: Real-time status and event logging
+- **Cloudlet Tracking**: Execution progress with countdown timers
+- **System Logs**: Centralized logging of all operations
+- **Prometheus Integration**: Deep metrics collection and analysis
+
+### Advanced Memory Management
+- Dynamic memory allocation with page-level tracking
+- Real-time memory fragmentation analysis
+- Visual memory map showing page allocation status
+- Memory usage patterns and trends
+- Automatic defragmentation when fragmentation exceeds thresholds
 
 ### Auto-scaling & Optimization
-- Automatic scaling based on resource thresholds (80% scale up, 20% scale down)
-- Configurable cooldown periods to prevent rapid scaling
-- Automatic cleanup of idle VMs after 1 minute (reduced from 2 minutes)
-- Resource optimization recommendations
-- Memory fragmentation monitoring and visualization
+- **Adaptive Cooldown**: Dynamic cooldown periods based on system load
+- **Intelligent Scaling**: Scale up at 80% utilization, down at 20%
+- **Idle VM Cleanup**: Automatic removal after 1 minute of inactivity
+- **Resource Optimization**: Smart allocation based on workload patterns
+- **Real-time Metrics**: Live updates of resource utilization
+- **Threshold Alerts**: Notifications for critical resource levels
 
 ## Setup
 
@@ -49,29 +58,53 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 2. Open your browser and navigate to `http://localhost:5000`
 
 ### Monitoring Setup
-1. Start the CloudFlash application:
+1. Start the CloudFlash application with enhanced monitoring:
    ```bash
    python -m cloudflash.app
    ```
-2. Access the monitoring dashboard at:
-   - **CloudFlash Monitoring**: http://localhost:5000/prometheus
+2. Access the monitoring dashboards:
+   - **CloudFlash Dashboard**: http://localhost:5000
    - **Prometheus UI**: http://localhost:9090 (for advanced queries)
+   - **Metrics Endpoint**: http://localhost:5000/metrics
+3. Enable real-time updates:
+   - The dashboard automatically connects via WebSocket
+   - No additional configuration needed for live updates
 
 ## Dashboard Overview
 
-The CloudFlash monitoring dashboard includes the following panels:
+The CloudFlash monitoring dashboard provides comprehensive visibility into your cloud resources:
 
-1. **Active VMs** - Shows the current number of running VMs
-2. **Active Cloudlets** - Shows the current number of active cloudlets
-3. **CPU Usage by VM** - Tracks CPU usage for each VM
-4. **Memory Management** - Detailed memory metrics including:
-   - Total and free memory pages
-   - Memory fragmentation percentage
-   - Visual memory map showing page allocation
-   - Real-time updates of memory usage patterns
-5. **Bandwidth Usage by VM** - Tracks network bandwidth usage
-6. **GPU Usage by VM** - Tracks GPU utilization (if available)
-7. **System Log** - Real-time log of system events and operations
+### Resource Overview
+- **Active VMs**: Current count and status of running VMs
+- **Active Cloudlets**: Number of cloudlets being processed
+- **Resource Utilization**: At-a-glance view of CPU, memory, and storage usage
+
+### Detailed Metrics
+1. **CPU Usage**
+   - Per-VM CPU utilization
+   - Historical trends and spikes
+   - Load averages
+
+2. **Memory Management**
+   - Real-time memory allocation
+   - Page-level visualization
+   - Fragmentation analysis
+   - Usage patterns and forecasting
+
+3. **Network & Storage**
+   - Bandwidth usage by VM
+   - Storage I/O metrics
+   - Network latency and throughput
+
+4. **GPU Monitoring** (when available)
+   - GPU utilization
+   - Memory usage
+   - Temperature and power metrics
+
+5. **System Logs**
+   - Real-time event streaming
+   - Filterable by severity
+   - Search functionality
 
 ### Memory Management Panel
 
@@ -87,9 +120,28 @@ The memory management panel provides detailed insights into your system's memory
 
 ### Auto-scaling Behavior
 
+CloudFlash implements intelligent auto-scaling with these features:
+
+#### Scaling Policies
 - **Scale Up**: Triggers when resource usage exceeds 80%
 - **Scale Down**: Occurs when usage drops below 20%
-- **Idle VM Cleanup**: Inactive VMs are automatically removed after 1 minute
+- **Adaptive Cooldown**: Dynamic cooldown periods based on:
+  - Current system load
+  - Historical patterns
+  - Resource contention levels
+
+#### Resource Management
+- **Idle VM Cleanup**: Inactive VMs removed after 1 minute
+- **Smart Allocation**: Resources allocated based on:
+  - Workload requirements
+  - Priority levels
+  - Historical usage patterns
+- **Fragmentation Control**: Automatic defragmentation when needed
+
+#### Real-time Adjustments
+- Continuous monitoring of resource utilization
+- Immediate response to workload changes
+- Predictive scaling based on trends
 
 Access these metrics through the CloudFlash monitoring dashboard at http://localhost:5000/prometheus
 
