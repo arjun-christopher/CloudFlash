@@ -151,6 +151,92 @@ function updateCharts(metrics) {
         scalingStatus.textContent = metrics.scaling_status;
         scalingStatus.className = 'scaling-status ' + (metrics.scaling_status === 'Disabled' ? 'disabled' : 'active');
     }
+    
+    // Update memory metrics if available
+    if (metrics.memory) {
+        const totalPages = metrics.memory.total_pages || 0;
+        const freePages = metrics.memory.free_pages || 0;
+        const usedPages = totalPages - freePages;
+        const fragmentation = metrics.memory.fragmentation || 0;
+        
+        // Update metric displays
+        document.getElementById('totalPages').textContent = totalPages;
+        document.getElementById('freePages').textContent = freePages;
+        document.getElementById('fragmentation').textContent = `${fragmentation.toFixed(1)}%`;
+        
+        // Update memory map visualization
+        const memoryMap = document.getElementById('memoryMap');
+        if (memoryMap) {
+            // Clear existing visualization
+            memoryMap.innerHTML = '';
+            
+            // Create a simplified visualization (max 100 blocks for performance)
+            const maxBlocks = 100;
+            const scale = Math.max(1, Math.ceil(totalPages / maxBlocks));
+            const displayPages = Math.min(maxBlocks, totalPages);
+            
+            for (let i = 0; i < displayPages; i++) {
+                const page = document.createElement('div');
+                page.className = 'memory-page';
+                
+                // Determine if this block represents used or free memory
+                const startPage = i * scale;
+                const endPage = Math.min((i + 1) * scale, totalPages);
+                const freeInThisBlock = Math.max(0, Math.min(freePages - startPage, endPage - startPage));
+                const usedInThisBlock = (endPage - startPage) - freeInThisBlock;
+                
+                if (usedInThisBlock > 0 && freeInThisBlock > 0) {
+                    // Partially used block (fragmented)
+                    page.classList.add('fragmented');
+                    page.title = `Pages ${startPage+1}-${endPage}: ${usedInThisBlock} used, ${freeInThisBlock} free`;
+                } else if (usedInThisBlock > 0) {
+                    // Fully used block
+                    page.classList.add('used');
+                    page.title = `Pages ${startPage+1}-${endPage}: Used`;
+                } else {
+                    // Free block
+                    page.classList.add('free');
+                    page.title = `Pages ${startPage+1}-${endPage}: Free`;
+                }
+                
+                memoryMap.appendChild(page);
+            }
+            
+            // Add legend if there's enough space
+            if (!document.getElementById('memoryLegend')) {
+                const legend = document.createElement('div');
+                legend.id = 'memoryLegend';
+                legend.style.display = 'flex';
+                legend.style.justifyContent = 'center';
+                legend.style.gap = '12px';
+                legend.style.marginTop = '12px';
+                legend.style.fontSize = '12px';
+                
+                const addLegendItem = (color, label) => {
+                    const item = document.createElement('div');
+                    item.style.display = 'flex';
+                    item.style.alignItems = 'center';
+                    item.style.gap = '4px';
+                    
+                    const swatch = document.createElement('div');
+                    swatch.style.width = '12px';
+                    swatch.style.height = '12px';
+                    swatch.style.borderRadius = '2px';
+                    swatch.style.backgroundColor = color;
+                    
+                    item.appendChild(swatch);
+                    item.appendChild(document.createTextNode(label));
+                    return item;
+                };
+                
+                legend.appendChild(addLegendItem('#4caf50', 'Free'));
+                legend.appendChild(addLegendItem('#f44336', 'Used'));
+                legend.appendChild(addLegendItem('#ff9800', 'Fragmented'));
+                
+                memoryMap.parentNode.insertBefore(legend, memoryMap.nextSibling);
+            }
+        }
+    }
 
     // Update utilization display
     const utilization = metrics.utilization;
@@ -269,8 +355,9 @@ function updateCharts(metrics) {
     }
 
     // Update VM Table
-    const vmTableBody = document.getElementById('vmTable').querySelector('tbody');
-    vmTableBody.innerHTML = '';
+    const vmTableBody = document.getElementById('vmTable')?.querySelector('tbody');
+    if (vmTableBody) {
+        vmTableBody.innerHTML = '';
     metrics.vms.forEach(vm => {
         vmTableBody.innerHTML += `
             <tr>
@@ -285,10 +372,12 @@ function updateCharts(metrics) {
             </tr>
         `;
     });
+    }
 
     // Update Cloudlet Table
-    const cloudletTableBody = document.getElementById('cloudletTable').querySelector('tbody');
-    cloudletTableBody.innerHTML = '';
+    const cloudletTableBody = document.getElementById('cloudletTable')?.querySelector('tbody');
+    if (cloudletTableBody) {
+        cloudletTableBody.innerHTML = '';
     metrics.cloudlets.forEach(cl => {
         let actions = `<button onclick="deleteCloudletById('${cl.id}')" style="color:#fff;background:#e53935;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;">Delete</button>`;
         if (cl.status === 'ACTIVE') {
@@ -307,6 +396,7 @@ function updateCharts(metrics) {
             </tr>
         `;
     });
+    }
 
     // Show auto-scaling status
     let autoscale = metrics.auto_scaling ? 'Enabled' : 'Disabled';

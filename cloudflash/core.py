@@ -3,6 +3,7 @@ import uuid
 import time
 from enum import Enum, auto
 from collections import deque
+from typing import List, Dict, Optional
 
 # --- ENUMS AND CONSTANTS ---
 
@@ -18,6 +19,97 @@ class VMStatus(Enum):
     RUNNING = auto()
     SCALING = auto()
     TERMINATED = auto()
+
+# --- MEMORY MANAGER ---
+class MemoryManager:
+    def __init__(self, total_memory: int = 1024):  # Total memory in GB
+        self.PAGE_SIZE = 1  # 1GB per page
+        self.total_pages = total_memory // self.PAGE_SIZE
+        self.pages = [False] * self.total_pages  # False = free, True = allocated
+        self.page_to_vm: Dict[int, str] = {}  # Map page index to VM ID
+        self.page_last_used = [time.time()] * self.total_pages  # Track last use
+        self.lock = threading.Lock()
+
+    def allocate_pages(self, ram_needed: int, vm_id: str) -> List[int]:
+        """Allocate pages for the given RAM requirement."""
+        with self.lock:
+            pages_needed = (ram_needed + self.PAGE_SIZE - 1) // self.PAGE_SIZE
+            free_pages = [i for i, allocated in enumerate(self.pages) if not allocated]
+            
+            # Try to find contiguous pages first
+            for start in range(len(self.pages) - pages_needed + 1):
+                if all(not self.pages[start + i] for i in range(pages_needed)):
+                    for i in range(start, start + pages_needed):
+                        self.pages[i] = True
+                        self.page_to_vm[i] = vm_id
+                        self.page_last_used[i] = time.time()
+                    return list(range(start, start + pages_needed))
+            
+            # If no contiguous space, use any free pages
+            if len(free_pages) >= pages_needed:
+                allocated_pages = free_pages[:pages_needed]
+                for i in allocated_pages:
+                    self.pages[i] = True
+                    self.page_to_vm[i] = vm_id
+                    self.page_last_used[i] = time.time()
+                return allocated_pages
+            return []
+
+    def deallocate_pages(self, page_indices: List[int]) -> None:
+        """Deallocate pages and update last used time."""
+        with self.lock:
+            for i in page_indices:
+                if i in self.page_to_vm:
+                    self.pages[i] = False
+                    del self.page_to_vm[i]
+                    self.page_last_used[i] = time.time()
+
+    def consolidate(self) -> None:
+        """Consolidate fragmented memory to reduce gaps."""
+        with self.lock:
+            allocated_pages = [i for i, allocated in enumerate(self.pages) if allocated]
+            if not allocated_pages:
+                return
+            new_allocation = 0
+            for old_page in allocated_pages[:]:
+                if old_page != new_allocation:
+                    vm_id = self.page_to_vm[old_page]
+                    self.pages[old_page] = False
+                    del self.page_to_vm[old_page]
+                    self.pages[new_allocation] = True
+                    self.page_to_vm[new_allocation] = vm_id
+                    self.page_last_used[new_allocation] = self.page_last_used[old_page]
+                new_allocation += 1
+
+    def get_memory_metrics(self, vms: List[dict]) -> dict:
+        """Calculate memory metrics including fragmentation."""
+        with self.lock:
+            total_pages = self.total_pages
+            free_pages = sum(1 for allocated in self.pages if not allocated)
+            allocated_pages = [i for i, allocated in enumerate(self.pages) if allocated]
+            
+            # Calculate external fragmentation
+            external_fragmentation = 0
+            if allocated_pages:
+                gaps = [allocated_pages[i+1] - allocated_pages[i] - 1 
+                       for i in range(len(allocated_pages)-1)]
+                external_fragmentation = sum(gaps) / total_pages if gaps else 0
+            
+            # Calculate internal fragmentation
+            internal_fragmentation = 0
+            for vm in vms:
+                pages = sum(1 for p, v in self.page_to_vm.items() if v == vm['id'])
+                allocated_ram = pages * self.PAGE_SIZE
+                internal_fragmentation += (allocated_ram - vm['ram_used']) / total_pages
+            
+            fragmentation_percent = (external_fragmentation + internal_fragmentation) * 100
+            
+            return {
+                'total_pages': total_pages,
+                'free_pages': free_pages,
+                'allocated_pages': len(allocated_pages),
+                'fragmentation': fragmentation_percent
+            }
 
 # --- VM CLASS ---
 
@@ -38,8 +130,14 @@ class VM:
         self.lock = threading.Lock()
         self.last_activity = time.time()
         self.cloudlets = set()
+        self.memory_pages: List[int] = []  # Track allocated memory pages
 
-    def can_allocate(self, cpu, ram, storage, bandwidth=0, gpu=0):
+    def can_allocate(self, cpu, ram, storage, bandwidth=0, gpu=0, memory_manager=None):
+        if memory_manager:
+            pages_needed = (ram + memory_manager.PAGE_SIZE - 1) // memory_manager.PAGE_SIZE
+            free_pages = sum(1 for allocated in memory_manager.pages if not allocated)
+            if free_pages < pages_needed:
+                return False
         return (
             self.cpu_capacity - self.cpu_used >= cpu and
             self.ram_capacity - self.ram_used >= ram and
@@ -48,9 +146,15 @@ class VM:
             self.gpu_capacity - self.gpu_used >= gpu
         )
 
-    def allocate(self, cloudlet):
+    def allocate(self, cloudlet, memory_manager=None):
         with self.lock:
-            if self.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, cloudlet.bandwidth, cloudlet.gpu):
+            if self.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, 
+                              cloudlet.bandwidth, cloudlet.gpu, memory_manager):
+                if memory_manager:
+                    pages = memory_manager.allocate_pages(cloudlet.ram, self.id)
+                    if not pages:
+                        return False
+                    self.memory_pages.extend(pages)
                 self.cpu_used += cloudlet.cpu
                 self.ram_used += cloudlet.ram
                 self.storage_used += cloudlet.storage
@@ -62,9 +166,14 @@ class VM:
                 return True
             return False
 
-    def deallocate(self, cloudlet):
+    def deallocate(self, cloudlet, memory_manager=None):
         with self.lock:
             if cloudlet.id in self.cloudlets:
+                if memory_manager:
+                    pages_needed = (cloudlet.ram + memory_manager.PAGE_SIZE - 1) // memory_manager.PAGE_SIZE
+                    pages_to_free = self.memory_pages[-pages_needed:] if self.memory_pages else []
+                    memory_manager.deallocate_pages(pages_to_free)
+                    self.memory_pages = self.memory_pages[:-pages_needed] if self.memory_pages else []
                 self.cpu_used -= cloudlet.cpu
                 self.ram_used -= cloudlet.ram
                 self.storage_used -= cloudlet.storage
@@ -108,9 +217,11 @@ class ResourceManager:
         self.cloudlets = []
         self.pending_queue = deque()
         self.lock = threading.RLock()
+        self.memory_manager = MemoryManager(total_memory=1024)
         self.monitor_thread = threading.Thread(target=self._monitor, daemon=True)
         self.metrics_callback = None  # Will be set by Flask app if present
         self.last_scaling_time = 0  # Track last scaling operation
+        self.last_consolidation_time = 0
         self.monitor_thread.start()
 
     def set_metrics_callback(self, cb):
@@ -165,9 +276,15 @@ class ResourceManager:
 
     def add_vm(self, vm):
         with self.lock:
+            pages = self.memory_manager.allocate_pages(vm.ram_capacity, vm.id)
+            if not pages:
+                print(f"Failed to add VM {vm.id}: Insufficient memory pages")
+                return False
+            vm.memory_pages = pages
             self.vms.append(vm)
-            # After adding a VM, immediately try to allocate any waiting/pending cloudlets
             self._allocate_cloudlets()
+            print(f"Added VM {vm.id} with {len(pages)} memory pages")
+            return True
 
     def submit_cloudlet(self, cloudlet):
         with self.lock:
@@ -182,6 +299,9 @@ class ResourceManager:
             self._allocate_cloudlets()
             self._scale_vms()
             self._check_deadlines()
+            if time.time() - self.last_consolidation_time > 30:  # Consolidate every 30 seconds
+                self.memory_manager.consolidate()
+                self.last_consolidation_time = time.time()
             if self.metrics_callback:
                 self.metrics_callback()
             time.sleep(1)
@@ -207,7 +327,12 @@ class ResourceManager:
 
     def _find_vm_for_cloudlet(self, cloudlet):
         # Best fit: least loaded VM that can fit
-        candidates = [vm for vm in self.vms if vm.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, cloudlet.bandwidth, cloudlet.gpu) and vm.status != VMStatus.TERMINATED]
+        candidates = [
+            vm for vm in self.vms 
+            if vm.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, 
+                            cloudlet.bandwidth, cloudlet.gpu, self.memory_manager) 
+            and vm.status != VMStatus.TERMINATED
+        ]
         if not candidates:
             return None
         return min(candidates, key=lambda vm: (vm.cpu_used + vm.ram_used + vm.storage_used))
@@ -318,10 +443,8 @@ class ResourceManager:
                     cloudlet.completion_time = time.time()
                     for vm in self.vms:
                         if vm.id == cloudlet.vm_id:
-                            vm.deallocate(cloudlet)
+                            vm.deallocate(cloudlet, self.memory_manager)
                             break
-            
-            # After completing a cloudlet, try to allocate any waiting cloudlets
             self._allocate_cloudlets()
 
     def delete_cloudlet(self, cloudlet_id):
@@ -332,14 +455,12 @@ class ResourceManager:
                     if cl.status == CloudletStatus.ACTIVE and cl.vm_id:
                         for vm in self.vms:
                             if vm.id == cl.vm_id:
-                                vm.deallocate(cl)
+                                vm.deallocate(cl, self.memory_manager)
                                 break
                     # Remove from queues
                     if cl in self.pending_queue:
                         self.pending_queue.remove(cl)
                     self.cloudlets.remove(cl)
-                    
-                    # After deleting a cloudlet, try to allocate any waiting cloudlets
                     self._allocate_cloudlets()
                     return True
             return False
@@ -349,9 +470,12 @@ class ResourceManager:
             for vm in self.vms:
                 if vm.id == vm_id:
                     # Only allow deletion if no cloudlet is running on this VM
-                    running = any(cl.vm_id == vm_id and cl.status == CloudletStatus.ACTIVE for cl in self.cloudlets)
+                    running = any(cl.vm_id == vm_id and cl.status == CloudletStatus.ACTIVE 
+                               for cl in self.cloudlets)
                     if running:
                         return False  # Indicate error: VM has running cloudlets
+                    # Deallocate VM's memory pages
+                    self.memory_manager.deallocate_pages(vm.memory_pages)
                     self.vms.remove(vm)
                     return True
             return False
@@ -368,39 +492,46 @@ class ResourceManager:
             
             if total_cpu == 0 or total_ram == 0 or total_storage == 0:
                 avg_utilization = 0
+                cpu_utilization = 0
+                ram_utilization = 0
+                storage_utilization = 0
             else:
                 cpu_utilization = used_cpu / total_cpu
                 ram_utilization = used_ram / total_ram
                 storage_utilization = used_storage / total_storage
                 avg_utilization = (cpu_utilization + ram_utilization + storage_utilization) / 3
 
-            scaling_status = "Disabled"
-            if avg_utilization > self.SCALING_UP_THRESHOLD:
+            scaling_status = "Stable"
+            if avg_utilization > self.SCALING_UP_THRESHOLD or self.pending_queue:
                 scaling_status = "Scaling Up"
             elif avg_utilization < self.SCALING_DOWN_THRESHOLD:
                 scaling_status = "Scaling Down"
-            elif self.vms and self.pending_queue:
-                scaling_status = "Pending Allocation"
+
+            vms_data = [
+                {
+                    'id': vm.id,
+                    'cpu_capacity': vm.cpu_capacity,
+                    'ram_capacity': vm.ram_capacity,
+                    'storage_capacity': vm.storage_capacity,
+                    'bandwidth_capacity': vm.bandwidth_capacity,
+                    'gpu_capacity': vm.gpu_capacity,
+                    'cpu_used': vm.cpu_used,
+                    'ram_used': vm.ram_used,
+                    'storage_used': vm.storage_used,
+                    'bandwidth_used': vm.bandwidth_used,
+                    'gpu_used': vm.gpu_used,
+                    'status': vm.status.name,
+                    'last_activity': vm.last_activity,
+                    'memory_pages': vm.memory_pages
+                }
+                for vm in self.vms
+            ]
+            
+            # Get memory metrics including fragmentation
+            memory_metrics = self.memory_manager.get_memory_metrics(vms_data)
 
             return {
-                'vms': [
-                    {
-                        'id': vm.id,
-                        'cpu_capacity': vm.cpu_capacity,
-                        'ram_capacity': vm.ram_capacity,
-                        'storage_capacity': vm.storage_capacity,
-                        'bandwidth_capacity': vm.bandwidth_capacity,
-                        'gpu_capacity': vm.gpu_capacity,
-                        'cpu_used': vm.cpu_used,
-                        'ram_used': vm.ram_used,
-                        'storage_used': vm.storage_used,
-                        'bandwidth_used': vm.bandwidth_used,
-                        'gpu_used': vm.gpu_used,
-                        'status': vm.status.name,
-                        'last_activity': vm.last_activity
-                    }
-                    for vm in self.vms
-                ],
+                'vms': vms_data,
                 'cloudlets': [
                     {
                         'id': cl.id,
@@ -427,5 +558,6 @@ class ResourceManager:
                     'storage': storage_utilization * 100 if total_storage > 0 else 0,
                     'average': avg_utilization * 100
                 },
+                'memory': memory_metrics,
                 'auto_scaling': True
             }

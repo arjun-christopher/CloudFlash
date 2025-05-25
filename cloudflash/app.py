@@ -16,6 +16,7 @@ import psutil
 import os
 from pathlib import Path
 import time
+from typing import Optional, List, Dict, Any
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
@@ -37,6 +38,10 @@ MEMORY_USAGE = Gauge('memory_usage_mb', 'Memory usage in MB', ['vm_id'])
 STORAGE_USAGE = Gauge('storage_usage_gb', 'Storage usage in GB', ['vm_id'])
 BANDWIDTH_USAGE = Gauge('bandwidth_usage_mbps', 'Bandwidth usage in Mbps', ['vm_id'])
 GPU_USAGE = Gauge('gpu_usage_percent', 'GPU usage percentage', ['vm_id'])
+MEMORY_PAGES_TOTAL = Gauge('memory_pages_total', 'Total memory pages')
+MEMORY_PAGES_FREE = Gauge('memory_pages_free', 'Free memory pages')
+FRAGMENTATION_PERCENT = Gauge('fragmentation_percent', 'Memory fragmentation percentage')
+REQUEST_TIME = Histogram('request_latency_seconds', 'Request latency in seconds', ['endpoint', 'method'])
 
 # Add prometheus wsgi middleware to route /metrics requests
 app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
@@ -121,6 +126,21 @@ def start_monitoring_stack():
         traceback.print_exc()
         return False
 
+def start_monitoring_async():
+    print("\n🔄 Starting monitoring stack in background...")
+    try:
+        if start_monitoring_stack():
+            print("✅ Monitoring stack started successfully")
+            print("   - Grafana: http://localhost:3000 (admin/admin)")
+            print("   - Prometheus: http://localhost:9090")
+        else:
+            print("⚠️ Could not start monitoring stack. The application will continue without monitoring.")
+            print("   Make sure Docker Desktop is installed and running if you want to use monitoring features.")
+    except Exception as e:
+        print(f"❌ Error in monitoring thread: {e}")
+        import traceback
+        traceback.print_exc()
+
 def stop_monitoring():
     """Stop the monitoring stack."""
     global monitoring_process
@@ -140,19 +160,23 @@ def stop_monitoring():
 def update_prometheus_metrics():
     """Update Prometheus metrics with current resource usage"""
     metrics = manager.get_metrics()
-    
-    # Update VM and Cloudlet counts
     VM_GAUGE.set(len(metrics.get('vms', [])))
-    CLOUDLET_GAUGE.set(len(metrics.get('cloudlets', [])))
+    CLOUDLET_GAUGE.set(len([cl for cl in metrics.get('cloudlets', []) if cl['status'] == 'ACTIVE']))
     
-    # Update resource usage per VM
+    # Update VM-specific metrics
     for vm in metrics.get('vms', []):
         vm_id = vm.get('id', 'unknown')
         CPU_USAGE.labels(vm_id=vm_id).set(vm.get('cpu_used', 0))
         MEMORY_USAGE.labels(vm_id=vm_id).set(vm.get('ram_used', 0))
-        STORAGE_USAGE.labels(vm_id=vm_id).set(vm.get('storage_used', 0) / 1024)  # Convert MB to GB
+        STORAGE_USAGE.labels(vm_id=vm_id).set(vm.get('storage_used', 0) / 1024)  # Convert to GB
         BANDWIDTH_USAGE.labels(vm_id=vm_id).set(vm.get('bandwidth_used', 0))
         GPU_USAGE.labels(vm_id=vm_id).set(vm.get('gpu_used', 0))
+    
+    # Update memory metrics
+    if 'memory' in metrics:
+        MEMORY_PAGES_TOTAL.set(metrics['memory'].get('total_pages', 0))
+        MEMORY_PAGES_FREE.set(metrics['memory'].get('free_pages', 0))
+        FRAGMENTATION_PERCENT.set(metrics['memory'].get('fragmentation', 0))
 
 # Update metrics every 5 seconds
 def metrics_updater():
@@ -301,87 +325,106 @@ def prometheus():
         """, 503
 
 @app.route("/api/vms", methods=["POST"])
+@app.route("/api/vms", methods=["POST"])
 def create_vm():
-    data = request.json
-    try:
-        cpu = int(data.get("cpu"))
-        ram = int(data.get("ram"))
-        storage = int(data.get("storage"))
-        bandwidth = int(data.get("bandwidth", 1000))
-        gpu = int(data.get("gpu", 0))
-        vm = VM(cpu, ram, storage, bandwidth, gpu)
-        manager.add_vm(vm)
-        broadcast_metrics()
-        return jsonify({"status": "success", "vm_id": vm.id}), 201
-    except Exception as e:
-        print("Error in /api/vms:", e)
-        return jsonify({"status": "error", "error": str(e)}), 400
+    with REQUEST_TIME.labels(endpoint='/api/vms', method='POST').time():
+        data = request.json
+        try:
+            cpu = int(data.get("cpu"))
+            ram = int(data.get("ram"))
+            storage = int(data.get("storage"))
+            bandwidth = int(data.get("bandwidth", 1000))
+            gpu = int(data.get("gpu", 0))
+            
+            vm = VM(cpu, ram, storage, bandwidth, gpu)
+            if manager.add_vm(vm):
+                socketio.emit('metrics_update', manager.get_metrics())
+                return jsonify({"status": "success", "vm_id": vm.id}), 201
+            return jsonify({"status": "error", "error": "Insufficient memory pages"}), 400
+        except Exception as e:
+            print("Error in /api/vms:", e)
+            return jsonify({"status": "error", "error": str(e)}), 400
 
 @app.route("/api/cloudlets", methods=["POST"])
+@app.route("/api/cloudlets", methods=["POST"])
 def submit_cloudlet():
-    data = request.json
-    try:
-        cpu = int(data.get("cpu"))
-        ram = int(data.get("ram"))
-        storage = int(data.get("storage"))
-        bandwidth = int(data.get("bandwidth", 100))
-        gpu = int(data.get("gpu", 0))
-        sla_priority = int(data.get("sla_priority", 2))
-        deadline = int(data.get("deadline", 60))  # seconds from now
-        name = data.get("name")
-        cloudlet = Cloudlet(cpu, ram, storage, sla_priority, deadline, name, bandwidth, gpu)
-        manager.submit_cloudlet(cloudlet)
-        broadcast_metrics()
-        return jsonify({"status": "success", "cloudlet_id": cloudlet.id}), 201
-    except Exception as e:
-        print("Error in /api/cloudlets:", e)
-        return jsonify({"status": "error", "error": str(e)}), 400
+    with REQUEST_TIME.labels(endpoint='/api/cloudlets', method='POST').time():
+        data = request.json
+        try:
+            cpu = int(data.get("cpu"))
+            ram = int(data.get("ram"))
+            storage = int(data.get("storage"))
+            bandwidth = int(data.get("bandwidth", 100))
+            gpu = int(data.get("gpu", 0))
+            sla_priority = int(data.get("sla_priority", 2))
+            deadline = int(data.get("deadline", 60))
+            name = data.get("name")
+            
+            cloudlet = Cloudlet(cpu, ram, storage, sla_priority, deadline, name, bandwidth, gpu)
+            manager.submit_cloudlet(cloudlet)
+            socketio.emit('metrics_update', manager.get_metrics())
+            return jsonify({"status": "success", "cloudlet_id": cloudlet.id}), 201
+        except Exception as e:
+            print("Error in /api/cloudlets:", e)
+            return jsonify({"status": "error", "error": str(e)}), 400
 
 @app.route("/api/cloudlets/complete", methods=["POST"])
+@app.route("/api/cloudlets/complete", methods=["POST"])
 def complete_cloudlet():
-    data = request.json
-    cloudlet_id = data.get("cloudlet_id")
-    manager.complete_cloudlet(cloudlet_id)
-    broadcast_metrics()
-    return jsonify({"status": "success"})
+    with REQUEST_TIME.labels(endpoint='/api/cloudlets/complete', method='POST').time():
+        data = request.json
+        cloudlet_id = data.get("cloudlet_id")
+        manager.complete_cloudlet(cloudlet_id)
+        socketio.emit('metrics_update', manager.get_metrics())
+        return jsonify({"status": "success"})
 
 @app.route("/api/cloudlets/<cloudlet_id>", methods=["DELETE"])
+@app.route("/api/cloudlets/<cloudlet_id>", methods=["DELETE"])
 def delete_cloudlet(cloudlet_id):
-    try:
-        result = manager.delete_cloudlet(cloudlet_id)
-        broadcast_metrics()
-        if result:
-            return jsonify({"status": "success", "cloudlet_id": cloudlet_id}), 200
-        else:
-            return jsonify({"status": "not_found", "cloudlet_id": cloudlet_id}), 404
-    except Exception as e:
-        print("Error in /api/cloudlets/<cloudlet_id> [DELETE]:", e)
-        return jsonify({"status": "error", "error": str(e)}), 400
+    with REQUEST_TIME.labels(endpoint='/api/cloudlets/<cloudlet_id>', method='DELETE').time():
+        try:
+            result = manager.delete_cloudlet(cloudlet_id)
+            socketio.emit('metrics_update', manager.get_metrics())
+            if result:
+                return jsonify({"status": "success", "cloudlet_id": cloudlet_id}), 200
+            else:
+                return jsonify({"status": "not_found", "cloudlet_id": cloudlet_id}), 404
+        except Exception as e:
+            print("Error in /api/cloudlets/<cloudlet_id> [DELETE]:", e)
+            return jsonify({"status": "error", "error": str(e)}), 400
 
 @app.route("/api/vms/<vm_id>", methods=["DELETE"])
+@app.route("/api/vms/<vm_id>", methods=["DELETE"])
 def delete_vm(vm_id):
-    try:
-        result = manager.delete_vm(vm_id)
-        broadcast_metrics()
-        if result:
-            return jsonify({"status": "success", "vm_id": vm_id}), 200
-        else:
-            return jsonify({"status": "not_found", "vm_id": vm_id}), 404
-    except Exception as e:
-        print("Error in /api/vms/<vm_id> [DELETE]:", e)
-        return jsonify({"status": "error", "error": str(e)}), 400
+    with REQUEST_TIME.labels(endpoint='/api/vms/<vm_id>', method='DELETE').time():
+        try:
+            result = manager.delete_vm(vm_id)
+            socketio.emit('metrics_update', manager.get_metrics())
+            if result:
+                return jsonify({"status": "success", "vm_id": vm_id}), 200
+            else:
+                return jsonify({"status": "not_found", "vm_id": vm_id}), 404
+        except Exception as e:
+            print("Error in /api/vms/<vm_id> [DELETE]:", e)
+            return jsonify({"status": "error", "error": str(e)}), 400
 
 @app.route("/api/metrics", methods=["GET"])
+@app.route("/api/metrics", methods=["GET"])
 def get_metrics():
-    return jsonify(manager.get_metrics())
+    with REQUEST_TIME.labels(endpoint='/api/metrics', method='GET').time():
+        return jsonify(manager.get_metrics())
 
 @app.route("/api/vms", methods=["GET"])
+@app.route("/api/vms", methods=["GET"])
 def list_vms():
-    return jsonify(manager.get_metrics()["vms"])
+    with REQUEST_TIME.labels(endpoint='/api/vms', method='GET').time():
+        return jsonify(manager.get_metrics()["vms"])
 
 @app.route("/api/cloudlets", methods=["GET"])
+@app.route("/api/cloudlets", methods=["GET"])
 def list_cloudlets():
-    return jsonify(manager.get_metrics()["cloudlets"])
+    with REQUEST_TIME.labels(endpoint='/api/cloudlets', method='GET').time():
+        return jsonify(manager.get_metrics()["cloudlets"])
 
 class AutoScaler:
     def __init__(self, manager, check_interval=10, cpu_threshold=70, min_vms=1, max_vms=10, cooldown=30):
@@ -426,6 +469,7 @@ class AutoScaler:
         return sum(vm["cpu_usage"] for vm in vms) / len(vms)
 
 @app.route('/metrics')
+@app.route('/metrics')
 def metrics():
     return make_wsgi_app()
 
@@ -439,6 +483,7 @@ def broadcast_metrics_loop():
             print(f"Error broadcasting metrics: {e}")
             time.sleep(5)  # Wait longer if there's an error
 
+@app.route('/health')
 @app.route('/health')
 def health_check():
     return jsonify({"status": "healthy", "timestamp": time.time()})

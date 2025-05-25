@@ -129,11 +129,31 @@
                     <canvas id="slaChart"></canvas>
                 </div>
                 <div class="dashboard-card">
+                    <h3>Memory Management</h3>
+                    <div class="memory-metrics">
+                        <div class="metric-item">
+                            <span class="metric-label">Total Pages:</span>
+                            <span id="totalPages" class="metric-value">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Free Pages:</span>
+                            <span id="freePages" class="metric-value">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Fragmentation:</span>
+                            <span id="fragmentation" class="metric-value">0%</span>
+                        </div>
+                        <div class="memory-visualization">
+                            <div id="memoryMap" class="memory-map"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-card">
                     <h3>Live System Log</h3>
                     <div id="systemLog" class="log"></div>
                 </div>
             </div>
-            <div class="dashboard-row">
+            <div class="dashboard-row table-row">
                 <div class="dashboard-card">
                     <h3>VM List</h3>
                     <table id="vmTable">
