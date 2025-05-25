@@ -294,7 +294,8 @@ class ResourceManager:
                     "is_active": cl.status == CloudletStatus.ACTIVE,
                     "is_completed": cl.status == CloudletStatus.COMPLETED,
                     "is_failed": cl.status == CloudletStatus.FAILED,
-                    "is_pending": cl.status in [CloudletStatus.WAITING, CloudletStatus.PENDING]
+                    "is_pending": cl.status in [CloudletStatus.WAITING, CloudletStatus.PENDING],
+                    "time_critical": ((cl.deadline - time.time()) < 10) if cl.status in [CloudletStatus.WAITING, CloudletStatus.PENDING, CloudletStatus.ACTIVE] else False,
                 })
             return cloudlets
 
@@ -591,12 +592,18 @@ class ResourceManager:
                 break  # Remove one VM at a time to prevent aggressive scaling down
 
     def _check_deadlines(self):
-        # If a cloudlet is about to miss its deadline, escalate priority or trigger more scaling
         now = time.time()
         for cloudlet in self.cloudlets:
             if cloudlet.status in [CloudletStatus.WAITING, CloudletStatus.PENDING]:
-                if (cloudlet.deadline - now) < 10:  # 10 seconds to deadline
-                    cloudlet.sla_priority = 3  # Escalate to high priority
+                time_left = cloudlet.deadline - now
+
+                # Escalate based on urgency
+                if time_left < 5:
+                    cloudlet.sla_priority = 3  # Critical
+                    self.log(f"⚠️ [SLA Escalation] {cloudlet.name} escalated to Priority 3 (deadline in {time_left:.1f}s)")
+                elif time_left < 15:
+                    cloudlet.sla_priority = max(cloudlet.sla_priority, 2)
+                    self.log(f"⏳ [SLA Warning] {cloudlet.name} elevated to Priority 2 (deadline in {time_left:.1f}s)")
 
     def complete_cloudlet(self, cloudlet_id):
         with self.lock:
@@ -718,7 +725,8 @@ class ResourceManager:
                         'vm_id': cl.vm_id,
                         'creation_time': cl.creation_time,
                         'start_time': cl.start_time,
-                        'completion_time': cl.completion_time
+                        'completion_time': cl.completion_time,
+                        'time_critical': ((cl.deadline - time.time()) < 10) if cl.status in [CloudletStatus.WAITING, CloudletStatus.PENDING, CloudletStatus.ACTIVE] else False,
                     }
                     for cl in self.cloudlets
                 ],

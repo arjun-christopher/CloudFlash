@@ -395,7 +395,7 @@ function updateCharts(metrics) {
             actions = `<button onclick="completeCloudletById('${cl.id}')" style="color:#fff;background:#43a047;border:none;padding:2px 8px;margin-right:6px;border-radius:4px;cursor:pointer;">Complete</button>` + actions;
         }
         cloudletTableBody.innerHTML += `
-            <tr>
+            <tr style="${cl.time_critical && cl.status !== 'COMPLETED' ? 'color: red; font-weight: bold; text-shadow: 0 0 3px red;' : ''}">
                 <td>${cl.name} <br><small title="${cl.id}">${cl.id.slice(0,8)}</small></td>
                 <td>${cl.cpu}</td>
                 <td>${cl.ram}</td>

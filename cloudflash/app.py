@@ -193,7 +193,7 @@ metrics_thread.start()
 
 # --- Helper to broadcast metrics ---
 def broadcast_metrics(log=None):
-    metrics = resource_manager.get_metrics()
+    metrics = manager.get_metrics()
     socketio.emit('metrics_update', metrics)
     if log:
         socketio.emit('system_log', {'log': log})
@@ -330,7 +330,6 @@ def prometheus():
         </html>
         """, 503
 
-@app.route("/api/vms", methods=["POST"])
 @app.route("/api/vms", methods=["POST"])
 def create_vm():
     with REQUEST_TIME.labels(endpoint='/api/vms', method='POST').time():
