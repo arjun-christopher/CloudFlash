@@ -49,7 +49,10 @@ app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
 })
 
 # Set up metrics callback
-manager.set_metrics_callback(lambda: socketio.emit('metrics_update', manager.get_metrics()))
+manager.set_metrics_callback(lambda log=None: (
+    socketio.emit('metrics_update', manager.get_metrics()),
+    socketio.emit('system_log', {'log': log}) if log else None
+))
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
@@ -189,8 +192,11 @@ metrics_thread = threading.Thread(target=metrics_updater, daemon=True)
 metrics_thread.start()
 
 # --- Helper to broadcast metrics ---
-def broadcast_metrics():
-    socketio.emit('metrics_update', manager.get_metrics())
+def broadcast_metrics(log=None):
+    metrics = resource_manager.get_metrics()
+    socketio.emit('metrics_update', metrics)
+    if log:
+        socketio.emit('system_log', {'log': log})
 
 @app.route('/')
 def index():

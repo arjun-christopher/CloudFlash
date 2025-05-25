@@ -258,6 +258,17 @@ function updateCharts(metrics) {
         `;
     }
 
+    if (metrics.scaling) {
+        const scalingInfo = document.createElement('div');
+        scalingInfo.style = 'margin-top: 10px; font-size: 0.9em; color: #333;';
+        const nextScaleTime = new Date(metrics.scaling.next_possible_scale * 1000).toLocaleTimeString();
+        scalingInfo.innerHTML = `
+            <strong>Scaling Cooldown:</strong> ${metrics.scaling.adaptive_cooldown.toFixed(1)}s<br>
+            <strong>Next Allowed Scale Time:</strong> ${nextScaleTime}
+        `;
+        document.getElementById('utilizationDisplay')?.appendChild(scalingInfo);
+    }    
+
     const avgUtil = utilization.average;
     const fill = document.getElementById('avgUtilFill');
     const label = document.getElementById('avgUtilPercent');
@@ -415,6 +426,10 @@ function updateCharts(metrics) {
 const socket = io();
 socket.on('metrics_update', (metrics) => {
     updateCharts(metrics);
+});
+
+socket.on('system_log', ({ log }) => {
+    addLog(log);
 });
 
 function applyPreset() {

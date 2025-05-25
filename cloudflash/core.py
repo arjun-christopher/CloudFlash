@@ -213,6 +213,19 @@ class ResourceManager:
         self.IDLE_TIME_THRESHOLD = 60  # 1 minutes in seconds
         self.SCALING_COOLDOWN = 10  # 10 seconds cooldown between scaling operations
         
+        # Base cooldown in seconds
+        self.BASE_COOLDOWN = 10
+        self.last_scaling_time = 0
+
+        # Per-resource scale-up/down thresholds (%)
+        self.THRESHOLDS = {
+            'cpu': {'up': 0.80, 'down': 0.20},
+            'ram': {'up': 0.75, 'down': 0.25},
+            'storage': {'up': 0.85, 'down': 0.30},
+            'bandwidth': {'up': 0.80, 'down': 0.30},
+            'gpu': {'up': 0.70, 'down': 0.25}
+        }
+
         self.vms = []
         self.cloudlets = []
         self.pending_queue = deque()
@@ -223,6 +236,7 @@ class ResourceManager:
         self.last_scaling_time = 0  # Track last scaling operation
         self.last_consolidation_time = 0
         self.monitor_thread.start()
+        self.system_logs = deque(maxlen=100)
 
     def set_metrics_callback(self, cb):
         self.metrics_callback = cb
@@ -247,7 +261,17 @@ class ResourceManager:
                 "last_activity": time.time() - vm.last_activity,
                 "is_idle": vm.status == VMStatus.IDLE
             } for vm in self.vms]
-            
+
+    def _log_scaling_event(self, event_type, message, utilization=None, cooldown=None):
+        timestamp = time.strftime('%X')
+        log = f"[{timestamp}] [{event_type}] {message}"
+        if utilization:
+            log += f" | Utilization: CPU {utilization['cpu']:.1%}, RAM {utilization['ram']:.1%}, Storage {utilization['storage']:.1%}"
+        if cooldown is not None:
+            log += f" | Cooldown: {cooldown:.1f}s"
+        self.system_logs.append(log)
+        self.log(log)  # Sends to dashboard if callback is set
+
     def get_cloudlets(self):
         """Return a list of all cloudlets with their current state."""
         with self.lock:
@@ -337,6 +361,15 @@ class ResourceManager:
             return None
         return min(candidates, key=lambda vm: (vm.cpu_used + vm.ram_used + vm.storage_used))
 
+    def _calculate_adaptive_cooldown(self, deltas):
+        """
+        Dynamic cooldown: higher spikes = faster scaling (min 3s, max BASE_COOLDOWN)
+        """
+        max_delta = max(deltas.values(), default=0)
+        severity = min(max_delta, 1.0)  # Cap at 1.0 (100%)
+        cooldown = self.BASE_COOLDOWN * (1 - severity)
+        return max(cooldown, 3)
+
     def _scale_vms(self):
         """Auto-scale VMs based on resource utilization"""
         if time.time() - self.last_scaling_time < self.SCALING_COOLDOWN:
@@ -359,6 +392,28 @@ class ResourceManager:
                 self.last_scaling_time = time.time()
                 return
 
+            # Total and used resources
+            total = {
+                'cpu': sum(vm.cpu_capacity for vm in self.vms),
+                'ram': sum(vm.ram_capacity for vm in self.vms),
+                'storage': sum(vm.storage_capacity for vm in self.vms),
+                'bandwidth': sum(vm.bandwidth_capacity for vm in self.vms),
+                'gpu': sum(vm.gpu_capacity for vm in self.vms)
+            }
+            used = {
+                'cpu': sum(vm.cpu_used for vm in self.vms),
+                'ram': sum(vm.ram_used for vm in self.vms),
+                'storage': sum(vm.storage_used for vm in self.vms),
+                'bandwidth': sum(vm.bandwidth_used for vm in self.vms),
+                'gpu': sum(vm.gpu_used for vm in self.vms)
+            }
+            utilization = {
+                key: (used[key] / total[key]) if total[key] > 0 else 0
+                for key in total
+            }
+
+            now = time.time()
+
             # Calculate overall resource utilization
             total_cpu = sum(vm.cpu_capacity for vm in self.vms)
             total_ram = sum(vm.ram_capacity for vm in self.vms)
@@ -378,6 +433,65 @@ class ResourceManager:
             # Calculate average utilization
             avg_utilization = (cpu_utilization + ram_utilization + storage_utilization) / 3
             
+            # Calculate how far each resource is from its threshold
+            spike_deltas = {
+                key: max(0, utilization[key] - self.THRESHOLDS[key]['up'])
+                for key in self.THRESHOLDS
+            }
+            dip_deltas = {
+                key: max(0, self.THRESHOLDS[key]['down'] - utilization[key])
+                for key in self.THRESHOLDS
+            }
+
+            # Determine if any resource needs scaling up/down
+            should_scale_up = any(spike_deltas.values())
+            should_scale_down = any(dip_deltas.values())
+
+            # Apply adaptive cooldown
+            adaptive_cooldown = self._calculate_adaptive_cooldown(spike_deltas if should_scale_up else dip_deltas)
+            self.last_adaptive_cooldown = adaptive_cooldown  # <- for dashboard visibility
+            
+            if should_scale_up:
+                self._scale_up()
+                self.last_scaling_time = now
+                self._log_scaling_event(
+                    event_type="SCALE_UP",
+                    message="Scaled up VM due to high resource usage",
+                    utilization=utilization,
+                    cooldown=adaptive_cooldown
+                )
+            elif should_scale_down:
+                self._scale_down()
+                self.last_scaling_time = now
+                self._log_scaling_event(
+                    event_type="SCALE_DOWN",
+                    message="Scaled down VM due to under-utilization",
+                    utilization=utilization,
+                    cooldown=adaptive_cooldown
+                )
+
+            # Log current utilization
+            self._log_scaling_event(
+                'utilization',
+                utilization=utilization,
+                spike_deltas={
+                    key: max(0, utilization[key] - self.THRESHOLDS[key]['up'])
+                    for key in self.THRESHOLDS
+                },
+                dip_deltas={
+                    key: max(0, self.THRESHOLDS[key]['down'] - utilization[key])
+                    for key in self.THRESHOLDS
+                },
+                cooldown=getattr(self, 'last_adaptive_cooldown', self.BASE_COOLDOWN)
+            )
+
+            print("Utilization:", {k: f"{v:.2%}" for k, v in utilization.items()})
+            print("Spike Deltas:", spike_deltas)
+            print("Cooldown:", adaptive_cooldown, "seconds")
+
+            if now - self.last_scaling_time < adaptive_cooldown:
+                return  # Still in cooldown
+
             # Scale up if utilization is high
             if avg_utilization > self.SCALING_UP_THRESHOLD:
                 # Create a VM with medium configuration
@@ -400,13 +514,46 @@ class ResourceManager:
                     if vm.status == VMStatus.IDLE and \
                        (current_time - vm.last_activity) > self.IDLE_TIME_THRESHOLD:
                         self.vms.remove(vm)
+                        self.memory_manager.deallocate_pages(vm.memory_pages)
+                        self._log_scaling_event(
+                            'scale_down', 
+                            vm_id=vm.id,
+                            cooldown=self.last_adaptive_cooldown,
+                            timestamp=current_time
+                        )
                         print(f"Auto-scaling: Removed idle VM {vm.id}")
                         self.last_scaling_time = time.time()
                         break  # Remove one VM at a time to prevent aggressive scaling down
 
+    def _log_scaling_event(self, event_type, vm_id=None, **kwargs):
+        """Log scaling events to be sent to the dashboard"""
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        event = {
+            'timestamp': timestamp,
+            'type': event_type,
+            'vm_id': vm_id,
+            'message': '',
+            'details': kwargs
+        }
+        
+        if event_type == 'scale_up':
+            event['message'] = f"[SCALE UP] Created new VM {vm_id}"
+        elif event_type == 'scale_down':
+            event['message'] = f"[SCALE DOWN] Removed idle VM {vm_id}"
+        elif event_type == 'utilization':
+            event['message'] = "[UTILIZATION] " + ", ".join(
+                f"{k.upper()}: {v:.1%}" for k, v in kwargs.get('utilization', {}).items()
+            )
+        
+        # Add to system logs
+        self.system_logs.append(event)
+        # Keep only the last 1000 log entries
+        if len(self.system_logs) > 1000:
+            self.system_logs = self.system_logs[-1000:]
+        return event
+
     def _scale_up(self):
-        """Create a new VM with medium configuration"""
-        # Create a medium VM as default
+        """Create a new VM for scaling up"""
         new_vm = VM(
             cpu=4,
             ram=8,
@@ -415,7 +562,14 @@ class ResourceManager:
             gpu=1
         )
         self.add_vm(new_vm)
-        print(f"Scaled up: Created new VM {new_vm.id}")
+        self._log_scaling_event(
+            'scale_up', 
+            vm_id=new_vm.id,
+            cooldown=self.last_adaptive_cooldown,
+            timestamp=time.time()
+        )
+        self.log(f"Scaled up: Created new VM {new_vm.id}")
+        self.log(f"[AUTO-SCALER] Scaling Up at {time.strftime('%X')} | Cooldown: {self.last_adaptive_cooldown:.1f}s")
 
     def _scale_down(self):
         """Remove idle VMs"""
@@ -423,8 +577,17 @@ class ResourceManager:
         for vm in self.vms[:]:  # Create a copy to safely remove items
             if vm.status == VMStatus.IDLE and \
                (current_time - vm.last_activity) > self.IDLE_TIME_THRESHOLD:
+                vm_id = vm.id
                 self.vms.remove(vm)
-                print(f"Scaled down: Removed idle VM {vm.id}")
+                self.memory_manager.deallocate_pages(vm.memory_pages)
+                self._log_scaling_event(
+                    'scale_down', 
+                    vm_id=vm_id,
+                    cooldown=self.last_adaptive_cooldown,
+                    timestamp=current_time
+                )
+                self.log(f"Scaled down: Removed idle VM {vm_id}")
+                self.log(f"[AUTO-SCALER] Scaling Down at {time.strftime('%X')} | Cooldown: {self.last_adaptive_cooldown:.1f}s")
                 break  # Remove one VM at a time to prevent aggressive scaling down
 
     def _check_deadlines(self):
@@ -479,6 +642,14 @@ class ResourceManager:
                     self.vms.remove(vm)
                     return True
             return False
+
+    def log(self, message: str):
+        print(message)  # for console
+        if self.metrics_callback:
+            try:
+                self.metrics_callback(log=message)  # send to dashboard via Flask
+            except Exception as e:
+                print(f"Failed to emit log: {e}")
 
     def get_metrics(self):
         with self.lock:
@@ -559,5 +730,11 @@ class ResourceManager:
                     'average': avg_utilization * 100
                 },
                 'memory': memory_metrics,
-                'auto_scaling': True
+                'auto_scaling': True,
+                'scaling': {
+                    'status': scaling_status,
+                    'last_scaled_at': self.last_scaling_time,
+                    'adaptive_cooldown': getattr(self, 'last_adaptive_cooldown', self.BASE_COOLDOWN),
+                    'next_possible_scale': self.last_scaling_time + getattr(self, 'last_adaptive_cooldown', self.BASE_COOLDOWN)
+                }
             }
