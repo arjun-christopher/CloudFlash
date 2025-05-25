@@ -210,7 +210,7 @@ class ResourceManager:
         # Auto-scaling configuration
         self.SCALING_UP_THRESHOLD = 0.8  # Scale up when utilization exceeds 80%
         self.SCALING_DOWN_THRESHOLD = 0.2  # Scale down when utilization is below 20%
-        self.IDLE_TIME_THRESHOLD = 120  # 2 minutes in seconds
+        self.IDLE_TIME_THRESHOLD = 60  # 1 minutes in seconds
         self.SCALING_COOLDOWN = 10  # 10 seconds cooldown between scaling operations
         
         self.vms = []
