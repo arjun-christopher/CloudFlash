@@ -9,6 +9,10 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 - Configure CPU, RAM, storage, bandwidth, and GPU resources
 - Real-time monitoring of VM performance and health
 - Clean up idle resources automatically
+- Secure VM creation with:
+  - Firewall controls (enabled by default)
+  - Resource isolation levels (Standard/Strict)
+  - Visual security indicators in the UI
 
 ### Cloudlet Management
 - Submit compute tasks with specific resource requirements
@@ -181,8 +185,25 @@ Access these metrics through the CloudFlash monitoring dashboard at http://local
    - Storage (10GB-10TB)
    - Bandwidth (10Mbps-10Gbps)
    - GPU Units (optional)
-3. Click "Create VM" to deploy
-4. Monitor resource usage in real-time
+3. Configure security settings:
+   - Enable Firewall (default: enabled)
+   - Select Isolation Level (Standard/Strict)
+4. Click "Create VM" to deploy
+5. Monitor resource usage in real-time
+
+#### Security Settings
+- **Firewall**: Controls network access to the VM
+  - Default: Enabled
+  - Protects against unauthorized access
+  - Can be disabled for development/testing
+
+- **Isolation Level**: Controls resource separation between VMs
+  - **Standard**: Basic resource isolation
+    - Prevents VM interference
+    - Good performance balance
+  - **Strict**: Enhanced security
+    - Stronger resource barriers
+    - More secure but resource-intensive
 
 ### Submitting Cloudlets
 1. Go to the Cloudlet Submission panel

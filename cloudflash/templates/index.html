@@ -83,6 +83,27 @@
                 <input type="number" id="vmBandwidth" placeholder="Bandwidth (Mbps)" min="1" value="1000">
                 <label for="vmGpu">GPU Units</label>
                 <input type="number" id="vmGpu" placeholder="GPU Units" min="0" value="0">
+                
+                <!-- Security Controls -->
+                <div class="security-controls">
+                    <h3>Security Settings</h3>
+                    <div class="security-option">
+                        <label>
+                            <input type="checkbox" id="vmFirewall" checked>
+                            Enable Firewall
+                            <span class="security-info">Protects VM from unauthorized access</span>
+                        </label>
+                    </div>
+                    <div class="security-option">
+                        <label for="vmIsolation">Isolation Level</label>
+                        <select id="vmIsolation">
+                            <option value="STANDARD">Standard (Recommended)</option>
+                            <option value="STRICT">Strict</option>
+                        </select>
+                        <span class="security-info">Controls resource isolation between VMs</span>
+                    </div>
+                </div>
+                
                 <button onclick="createVM()">Create VM</button>
             </div>
 

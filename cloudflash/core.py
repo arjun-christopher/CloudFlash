@@ -114,7 +114,8 @@ class MemoryManager:
 # --- VM CLASS ---
 
 class VM:
-    def __init__(self, cpu, ram, storage, bandwidth=1000, gpu=0):
+    def __init__(self, cpu, ram, storage, bandwidth=1000, gpu=0, 
+                 firewall_enabled=True, isolation_level='STANDARD'):
         self.id = str(uuid.uuid4())
         self.cpu_capacity = cpu
         self.ram_capacity = ram

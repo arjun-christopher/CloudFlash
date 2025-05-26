@@ -36,22 +36,27 @@ function showErrorPopup(message) {
 }
 
 function createVM() {
-    const cpu = document.getElementById('vmCpu').value;
-    const ram = document.getElementById('vmRam').value * document.getElementById('vmRamUnit').value;
-    const storage = document.getElementById('vmStorage').value * document.getElementById('vmStorageUnit').value;
-    const bandwidth = document.getElementById('vmBandwidth').value;
-    const gpu = document.getElementById('vmGpu').value;
-    const ramUnit = document.getElementById('vmRamUnit').options[document.getElementById('vmRamUnit').selectedIndex].text;
-    const storageUnit = document.getElementById('vmStorageUnit').options[document.getElementById('vmStorageUnit').selectedIndex].text;
+    const vmData = {
+        cpu: parseInt(document.getElementById('vmCpu').value),
+        ram: parseInt(document.getElementById('vmRam').value),
+        storage: parseInt(document.getElementById('vmStorage').value),
+        bandwidth: parseInt(document.getElementById('vmBandwidth').value),
+        gpu: parseInt(document.getElementById('vmGpu').value),
+        firewall_enabled: document.getElementById('vmFirewall').checked,
+        isolation_level: document.getElementById('vmIsolation').value
+    };
+
     fetch('/api/vms', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({cpu, ram, storage, bandwidth, gpu})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vmData)
     })
     .then(res => res.json())
     .then(data => {
         if (data.status === 'success') {
-            addLog(`VM created: ${data.vm_id} [${cpu} CPU, ${document.getElementById('vmRam').value} ${ramUnit} RAM, ${document.getElementById('vmStorage').value} ${storageUnit} Storage, ${bandwidth} Mbps Bandwidth, ${gpu} GPU]`);
+            const ramUnit = document.getElementById('vmRamUnit').options[document.getElementById('vmRamUnit').selectedIndex].text;
+            const storageUnit = document.getElementById('vmStorageUnit').options[document.getElementById('vmStorageUnit').selectedIndex].text;
+            addLog(`VM created: ${data.vm_id} [${vmData.cpu} CPU, ${document.getElementById('vmRam').value} ${ramUnit} RAM, ${document.getElementById('vmStorage').value} ${storageUnit} Storage, ${vmData.bandwidth} Mbps Bandwidth, ${vmData.gpu} GPU]`);
             showSuccessPopup('VM created successfully!');
         } else {
             addLog(`Error creating VM: ${data.error}`);
