@@ -70,16 +70,39 @@ class MemoryManager:
             allocated_pages = [i for i, allocated in enumerate(self.pages) if allocated]
             if not allocated_pages:
                 return
+            
+            # Create a mapping of VMs to their pages
+            vm_pages = {}
+            for page in allocated_pages:
+                vm_id = self.page_to_vm[page]
+                if vm_id not in vm_pages:
+                    vm_pages[vm_id] = []
+                vm_pages[vm_id].append(page)
+            
+            # Move pages while maintaining VM associations
             new_allocation = 0
             for old_page in allocated_pages[:]:
                 if old_page != new_allocation:
                     vm_id = self.page_to_vm[old_page]
+                    # Deallocate old page
                     self.pages[old_page] = False
                     del self.page_to_vm[old_page]
+                    # Allocate new page
                     self.pages[new_allocation] = True
                     self.page_to_vm[new_allocation] = vm_id
                     self.page_last_used[new_allocation] = self.page_last_used[old_page]
+                    # Update VM's memory pages list if it exists
+                    for vm in self.vms:
+                        if vm.id == vm_id and old_page in vm.memory_pages:
+                            vm.memory_pages.remove(old_page)
+                            vm.memory_pages.append(new_allocation)
                 new_allocation += 1
+                
+            # Clean up any orphaned pages
+            for page in range(self.total_pages):
+                if self.pages[page] and page not in self.page_to_vm:
+                    self.pages[page] = False
+                    self.page_last_used[page] = time.time()
 
     def get_memory_metrics(self, vms: List[dict]) -> dict:
         """Calculate memory metrics including fragmentation."""
