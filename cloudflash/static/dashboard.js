@@ -401,9 +401,9 @@ function updateCharts(metrics) {
                 <td>${vm.cpu_capacity}</td>
                 <td>${vm.ram_capacity}</td>
                 <td>${vm.storage_capacity}</td>
-                <td>${vm.bandwidth_capacity} Mbps</td>
+                <td>${vm.bandwidth_capacity}</td>
                 <td>${vm.gpu_capacity}</td>
-                <td>${vm.status}</td>
+                <td>${vm.status.charAt(0).toUpperCase() + vm.status.slice(1).toLowerCase()}</td>
                 <td><button onclick="deleteVmById('${vm.id}')" style="color:#fff;background:#e53935;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;">Delete</button></td>
             </tr>
         `;
@@ -425,9 +425,9 @@ function updateCharts(metrics) {
                 <td>${cl.cpu}</td>
                 <td>${cl.ram}</td>
                 <td>${cl.storage}</td>
-                <td>${cl.bandwidth} Mbps</td>
+                <td>${cl.bandwidth}</td>
                 <td>${cl.gpu}</td>
-                <td>${cl.status}</td>
+                <td>${cl.status.charAt(0).toUpperCase() + cl.status.slice(1).toLowerCase()}</td>
                 <td>${actions}</td>
             </tr>
         `;
