@@ -633,8 +633,18 @@ class ResourceManager:
             if vm.status == VMStatus.IDLE and \
                (current_time - vm.last_activity) > self.IDLE_TIME_THRESHOLD:
                 vm_id = vm.id
+                
+                # Find and deallocate all pages associated with this VM
+                pages_to_deallocate = []
+                for page, vm_id_in_page in self.memory_manager.page_to_vm.items():
+                    if vm_id_in_page == vm_id:
+                        pages_to_deallocate.append(page)
+                
+                self.memory_manager.deallocate_pages(pages_to_deallocate)
+                
+                # Remove VM from list
                 self.vms.remove(vm)
-                self.memory_manager.deallocate_pages(vm.memory_pages)
+                
                 self._log_scaling_event(
                     'scale_down', 
                     vm_id=vm_id,
