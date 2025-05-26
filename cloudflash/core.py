@@ -698,8 +698,17 @@ class ResourceManager:
                                for cl in self.cloudlets)
                     if running:
                         return False  # Indicate error: VM has running cloudlets
-                    # Deallocate VM's memory pages
-                    self.memory_manager.deallocate_pages(vm.memory_pages)
+                    
+                    # Find all pages associated with this VM
+                    pages_to_deallocate = []
+                    for page, vm_id_in_page in self.memory_manager.page_to_vm.items():
+                        if vm_id_in_page == vm_id:
+                            pages_to_deallocate.append(page)
+                    
+                    # Deallocate all pages associated with this VM
+                    self.memory_manager.deallocate_pages(pages_to_deallocate)
+                    
+                    # Remove VM from list
                     self.vms.remove(vm)
                     return True
             return False
