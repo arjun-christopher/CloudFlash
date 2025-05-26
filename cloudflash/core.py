@@ -217,6 +217,15 @@ class ResourceManager:
         self.BASE_COOLDOWN = 10
         self.last_scaling_time = 0
 
+        # Load balancing algorithm (default: round_robin)
+        self.load_balancing_algorithm = 'round_robin'
+        self.available_algorithms = [
+            'round_robin',
+            'least_loaded',
+            'weighted_round_robin',
+            'best_fit'
+        ]
+
         # Per-resource scale-up/down thresholds (%)
         self.THRESHOLDS = {
             'cpu': {'up': 0.80, 'down': 0.20},
@@ -351,16 +360,60 @@ class ResourceManager:
                     cloudlet.status = CloudletStatus.PENDING
 
     def _find_vm_for_cloudlet(self, cloudlet):
-        # Best fit: least loaded VM that can fit
+        """
+        Find a suitable VM for the cloudlet using the current load balancing algorithm.
+        
+        Args:
+            cloudlet: The cloudlet to be allocated
+            
+        Returns:
+            VM object if a suitable VM is found, None otherwise
+        """
+        algorithm = self.load_balancing_algorithm
         candidates = [
             vm for vm in self.vms 
             if vm.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, 
                             cloudlet.bandwidth, cloudlet.gpu, self.memory_manager) 
             and vm.status != VMStatus.TERMINATED
         ]
+        
         if not candidates:
             return None
-        return min(candidates, key=lambda vm: (vm.cpu_used + vm.ram_used + vm.storage_used))
+            
+        if algorithm == 'round_robin':
+            # Simple round-robin distribution
+            if not hasattr(self, '_last_vm_index'):
+                self._last_vm_index = -1
+            self._last_vm_index = (self._last_vm_index + 1) % len(candidates)
+            return candidates[self._last_vm_index]
+            
+        elif algorithm == 'least_loaded':
+            # Select VM with the least resource utilization
+            def get_utilization(vm):
+                cpu_util = vm.cpu_used / vm.cpu_capacity if vm.cpu_capacity > 0 else 0
+                ram_util = vm.ram_used / vm.ram_capacity if vm.ram_capacity > 0 else 0
+                # Weighted sum of utilizations (can be adjusted based on priority)
+                return 0.6 * cpu_util + 0.3 * ram_util + 0.1 * (vm.storage_used / vm.storage_capacity if vm.storage_capacity > 0 else 0)
+                
+            return min(candidates, key=get_utilization)
+            
+        elif algorithm == 'weighted_round_robin':
+            # Round-robin but weighted by VM capacity
+            if not hasattr(self, '_weighted_index'):
+                self._weighted_index = 0
+                self._weights = [vm.cpu_capacity + vm.ram_capacity for vm in candidates]
+                self._total_weight = sum(self._weights)
+                
+            selected = None
+            while not selected:
+                self._weighted_index = (self._weighted_index + 1) % len(candidates)
+                if random.random() < (self._weights[self._weighted_index] / self._total_weight):
+                    selected = candidates[self._weighted_index]
+            return selected
+            
+        else:  # best_fit (default)
+            # Original best-fit implementation
+            return min(candidates, key=lambda vm: (vm.cpu_used + vm.ram_used + vm.storage_used))
 
     def _calculate_adaptive_cooldown(self, deltas):
         """

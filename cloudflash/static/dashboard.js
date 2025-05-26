@@ -269,7 +269,12 @@ function updateCharts(metrics) {
         document.getElementById('utilizationDisplay')?.appendChild(scalingInfo);
     }    
 
-    const avgUtil = utilization.average;
+    // Check if metrics has utilization data
+    if (!metrics.utilization) {
+        console.warn('No utilization data in metrics:', metrics);
+        return;
+    }
+    const avgUtil = metrics.utilization.average || 0;
     const fill = document.getElementById('avgUtilFill');
     const label = document.getElementById('avgUtilPercent');
 
@@ -284,14 +289,21 @@ function updateCharts(metrics) {
         fill.style.background = '#e53935'; // Red
     }
 
-    // VM Utilization
-    const vms = metrics.vms;
-    const vmLabels = vms.map(vm => `VM-${vm.id.slice(-4)}`);
-    const cpu = vms.map(vm => (vm.cpu_used / vm.cpu_capacity) * 100);
-    const ram = vms.map(vm => (vm.ram_used / vm.ram_capacity) * 100);
-    const storage = vms.map(vm => (vm.storage_used / vm.storage_capacity) * 100);
-    const bandwidth = vms.map(vm => (vm.bandwidth_used / vm.bandwidth_capacity) * 100);
-    const gpu = vms.map(vm => (vm.gpu_used / vm.gpu_capacity) * 100);
+    // VM Utilization - Handle case where metrics.vms is undefined
+    const vms = metrics.vms || [];
+    const vmLabels = vms.length > 0 ? vms.map(vm => `VM-${vm.id ? vm.id.slice(-4) : '?'}`) : ['No VMs'];
+    
+    // Helper function to safely calculate utilization
+    const calculateUtilization = (used, capacity) => {
+        if (used === undefined || capacity === undefined || capacity === 0) return 0;
+        return (used / capacity) * 100;
+    };
+    
+    const cpu = vms.length > 0 ? vms.map(vm => calculateUtilization(vm.cpu_used, vm.cpu_capacity)) : [0];
+    const ram = vms.length > 0 ? vms.map(vm => calculateUtilization(vm.ram_used, vm.ram_capacity)) : [0];
+    const storage = vms.length > 0 ? vms.map(vm => calculateUtilization(vm.storage_used, vm.storage_capacity)) : [0];
+    const bandwidth = vms.length > 0 ? vms.map(vm => calculateUtilization(vm.bandwidth_used, vm.bandwidth_capacity)) : [0];
+    const gpu = vms.length > 0 ? vms.map(vm => calculateUtilization(vm.gpu_used, vm.gpu_capacity)) : [0];
 
     if (!vmChart) {
         vmChart = new Chart(document.getElementById('vmChart'), {
@@ -330,10 +342,18 @@ function updateCharts(metrics) {
         vmChart.update();
     }
 
-    // Cloudlet Status
-    const cloudlets = metrics.cloudlets;
+    // Cloudlet Status - Initialize with default values if cloudlets is not defined
+    const cloudlets = metrics.cloudlets || [];
     const statusCounts = { WAITING: 0, PENDING: 0, ACTIVE: 0, COMPLETED: 0, FAILED: 0 };
-    cloudlets.forEach(cl => statusCounts[cl.status] = (statusCounts[cl.status] || 0) + 1);
+    
+    // Only try to process if we have cloudlets
+    if (Array.isArray(cloudlets)) {
+        cloudlets.forEach(cl => {
+            if (cl && cl.status) {
+                statusCounts[cl.status] = (statusCounts[cl.status] || 0) + 1;
+            }
+        });
+    }
 
     if (!cloudletChart) {
         cloudletChart = new Chart(document.getElementById('cloudletChart'), {
@@ -422,6 +442,75 @@ function updateCharts(metrics) {
     }
 }
 
+// --- Load Balancing Functions ---
+function updateLoadBalancing() {
+    const algorithm = document.getElementById('lbAlgorithm').value;
+    
+    fetch('/api/settings/algorithm', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ algorithm: algorithm })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            document.getElementById('currentAlgorithm').textContent = 
+                `Current: ${algorithm.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`;
+            showSuccessPopup(`Load balancing algorithm updated to: ${algorithm.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`);
+        } else {
+            showErrorPopup(data.message || 'Failed to update algorithm');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating algorithm:', error);
+        showErrorPopup('Failed to update load balancing algorithm');
+    });
+}
+
+// Initialize the current algorithm display
+function initLoadBalancing() {
+    try {
+        const lbAlgorithmEl = document.getElementById('lbAlgorithm');
+        const currentAlgorithmEl = document.getElementById('currentAlgorithm');
+        
+        // Only proceed if elements exist
+        if (!lbAlgorithmEl || !currentAlgorithmEl) {
+            console.warn('Load balancing UI elements not found');
+            return false;
+        }
+        
+        fetch('/api/settings/algorithm')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.current_algorithm) {
+                    lbAlgorithmEl.value = data.current_algorithm;
+                    currentAlgorithmEl.textContent = 
+                        `Current: ${data.current_algorithm.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`;
+                    console.log('Load balancing algorithm initialized:', data.current_algorithm);
+                } else {
+                    console.warn('No current algorithm found in response');
+                }
+                return true;
+            })
+            .catch(error => {
+                console.error('Error loading algorithm settings:', error);
+                return false;
+            });
+            
+        return true; // Elements exist, initialization started
+    } catch (error) {
+        console.error('Error in initLoadBalancing:', error);
+        return false;
+    }
+}
+
 // --- Socket.IO Real-Time Updates ---
 const socket = io();
 socket.on('metrics_update', (metrics) => {
@@ -494,4 +583,76 @@ function applyCloudletPreset() {
         document.getElementById('cloudletSLA').value = 3;
         document.getElementById('cloudletDeadline').value = 120;
     }
+}
+
+// Function to initialize the application
+function initializeApp() {
+    try {
+        console.log('Initializing application...');
+        
+        // Initialize load balancing UI
+        const lbInitSuccess = initLoadBalancing();
+        console.log('Load balancing initialization:', lbInitSuccess ? 'success' : 'elements not found');
+        
+        // Initial chart update with minimal metrics and all required properties
+        updateCharts({ 
+            utilization: { average: 0 },
+            vms: [],
+            cloudlets: [],
+            active_cloudlets: 0,
+            completed_cloudlets: 0,
+            failed_cloudlets: 0,
+            pending_cloudlets: 0,
+            waiting_cloudlets: 0,
+            active_vms: 0,
+            total_vms: 0,
+            total_cloudlets: 0,
+            sla_violations: 0
+        });
+        
+        // Request initial metrics from the server
+        fetch('/api/metrics')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(metrics => {
+                console.log('Received initial metrics:', metrics);
+                if (metrics) {
+                    updateCharts(metrics);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching initial metrics:', error);
+            });
+            
+        // Set up socket.io connection for real-time updates
+        const socket = io();
+        socket.on('connect', () => {
+            console.log('Connected to server via Socket.IO');
+        });
+        
+        socket.on('metrics_update', (metrics) => {
+            console.log('Received metrics update:', metrics);
+            updateCharts(metrics);
+        });
+        
+        socket.on('system_log', ({ log }) => {
+            addLog(log);
+        });
+        
+    } catch (error) {
+        console.error('Error during initialization:', error);
+    }
+}
+
+// Check if the DOM is already loaded
+if (document.readyState === 'loading') {
+    // Loading hasn't finished yet, wait for the 'DOMContentLoaded' event
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    // DOM is already ready, initialize immediately
+    initializeApp();
 }

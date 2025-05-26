@@ -488,11 +488,25 @@ def broadcast_metrics_loop():
             print(f"Error broadcasting metrics: {e}")
             time.sleep(5)  # Wait longer if there's an error
 
-@app.route('/health')
+@app.route('/api/settings/algorithm', methods=['GET', 'POST'])
+def algorithm_settings():
+    if request.method == 'POST':
+        data = request.get_json()
+        algorithm = data.get('algorithm')
+        if algorithm in manager.available_algorithms:
+            manager.load_balancing_algorithm = algorithm
+            manager.log(f"Load balancing algorithm changed to: {algorithm}")
+            return jsonify({'status': 'success', 'algorithm': algorithm})
+        return jsonify({'status': 'error', 'message': 'Invalid algorithm'}), 400
+    else:
+        return jsonify({
+            'current_algorithm': manager.load_balancing_algorithm,
+            'available_algorithms': manager.available_algorithms
+        })
+
 @app.route('/health')
 def health_check():
     return jsonify({"status": "healthy", "timestamp": time.time()})
-
 def monitoring():
     """Start monitoring stack if it exists."""
     if MONITORING_DIR.exists() and DOCKER_COMPOSE_FILE.exists():

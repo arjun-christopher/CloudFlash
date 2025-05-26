@@ -24,6 +24,31 @@
         </div>
     </header>
 
+    <!-- Load Balancing Banner -->
+    <div class="load-balancing-banner">
+        <div class="load-balancing-container">
+            <h2>Load Balancing Algorithm</h2>
+            <div class="load-balancing-controls">
+                <select id="lbAlgorithm" class="form-control">
+                    <option value="round_robin">Round Robin</option>
+                    <option value="least_loaded">Least Loaded</option>
+                    <option value="weighted_round_robin">Weighted Round Robin</option>
+                    <option value="best_fit">Best Fit</option>
+                </select>
+                <button onclick="updateLoadBalancing()" class="update-algorithm-btn">
+                    Update Algorithm
+                </button>
+                <div id="currentAlgorithm" class="current-algorithm">Current: Round Robin</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('Load Balancing banner block inserted!');
+        console.log('lbAlgorithm:', document.getElementById('lbAlgorithm'));
+        console.log('currentAlgorithm:', document.getElementById('currentAlgorithm'));
+    </script>    
+
     <main>
         <section class="controls">
             <!-- VM Creation Card -->
@@ -204,6 +229,12 @@
     </footer>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const script = document.createElement('script');
+            script.src = "{{ url_for('static', filename='dashboard.js') }}";
+            document.body.appendChild(script);
+        });
+    </script>    
 </body>
 </html>
