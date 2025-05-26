@@ -421,7 +421,8 @@ function updateCharts(metrics) {
         }
         cloudletTableBody.innerHTML += `
             <tr style="${cl.time_critical && cl.status !== 'COMPLETED' ? 'color: red; font-weight: bold; text-shadow: 0 0 3px red;' : ''}">
-                <td>${cl.name} <br><small title="${cl.id}">${cl.id.slice(0,8)}</small></td>
+                <td>${cl.name}</td>
+                <td>${cl.vm_id ? cl.vm_id.slice(0,8) : 'N/A'}</td>
                 <td>${cl.cpu}</td>
                 <td>${cl.ram}</td>
                 <td>${cl.storage}</td>
