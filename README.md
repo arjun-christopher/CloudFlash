@@ -16,6 +16,19 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 - Track cloudlet lifecycle from submission to completion
 - Monitor resource consumption per cloudlet
 
+### Load Balancing
+CloudFlash implements intelligent load balancing to distribute cloudlets across available VMs efficiently:
+
+- **Multiple Algorithm Support**:
+  - **Round Robin**: Distributes tasks evenly across all VMs in sequence
+  - **Least Loaded**: Assigns tasks to the VM with the most available resources
+  - **Weighted Round Robin**: Distributes tasks based on VM capacity
+  - **Best Fit**: Selects the VM that best fits the cloudlet's requirements
+
+- **Real-time Algorithm Switching**: Change load balancing strategy on-the-fly
+- **Resource-Aware Distribution**: Considers CPU, memory, and other resource constraints
+- **Visual Feedback**: Current algorithm is clearly displayed in the UI
+
 ### Real-time Monitoring & Observability
 - **Live Dashboard**: Instant updates via WebSocket
 - **Resource Visualization**: CPU, memory, storage, and network
@@ -146,6 +159,19 @@ CloudFlash implements intelligent auto-scaling with these features:
 Access these metrics through the CloudFlash monitoring dashboard at http://localhost:5000/prometheus
 
 ## 🚀 Getting Started
+
+### Managing Load Balancing
+
+1. **Change Load Balancing Algorithm**:
+   - Locate the Load Balancing banner at the top of the dashboard
+   - Select your preferred algorithm from the dropdown
+   - Click "Update Algorithm" to apply changes
+   - The system will immediately start using the new algorithm for all new cloudlet assignments
+
+2. **Monitoring Load Distribution**:
+   - View current algorithm in the Load Balancing banner
+   - Monitor VM resource usage in real-time
+   - Check system logs for load balancing events and decisions
 
 ### Creating Virtual Machines
 1. Navigate to the VM Creation panel
@@ -305,6 +331,7 @@ This will remove the containers and volumes but keep your configuration files.
 
 ### Frontend
 - **UI**: Responsive design with modern CSS
+- **Load Balancing**: Intuitive controls for algorithm selection and monitoring
 - **Visualization**: Dynamic charts using Chart.js
 - **Real-time Updates**: Automatic refresh of metrics and status
 
