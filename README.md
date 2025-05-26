@@ -320,7 +320,7 @@ docker-compose -f docker-compose.monitoring.yml down -v
 
 This will remove the containers and volumes but keep your configuration files.
 
-## 🛠️ Technical Architecture
+## Technical Architecture
 
 ### Backend
 - **Framework**: Python Flask with SocketIO
