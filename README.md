@@ -158,7 +158,7 @@ CloudFlash implements intelligent auto-scaling with these features:
 
 Access these metrics through the CloudFlash monitoring dashboard at http://localhost:5000/prometheus
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Managing Load Balancing
 
@@ -208,7 +208,7 @@ Access these metrics through the CloudFlash monitoring dashboard at http://local
 - Scale-down occurs below 20% utilization
 - Idle VMs are automatically removed after 2 minutes
 
-## 🛠️ Advanced Configuration
+## Advanced Configuration
 
 ### Custom Metrics
 Add custom metrics to track additional system parameters:
@@ -246,7 +246,7 @@ def my_endpoint():
    - High CPU usage: `avg(rate(cloudflash_cpu_usage_percent[5m])) by (instance) > 80`
    - Memory pressure: `avg(cloudflash_memory_usage_bytes / cloudflash_memory_total_bytes * 100) by (instance) > 75`
 
-## 🐛 Troubleshooting Guide
+## Troubleshooting Guide
 
 ### Monitoring Issues
 
