@@ -258,14 +258,51 @@ Access these metrics through the CloudFlash monitoring dashboard at http://local
 - Access detailed metrics in the Prometheus dashboard at http://localhost:5000/prometheus
 - Monitor system health at `/health` endpoint
 
-### Auto-scaling
-- The system automatically scales based on resource utilization
+### Auto-scaling & Resource Management
+
+#### Scaling Behavior
 - **Scale-up**: Triggers when resource usage exceeds 80%
+  - Adaptive cooldown between 3-10 seconds based on utilization patterns
+  - Minimum 3-second cooldown during high utilization spikes
+  - Maximum 10-second cooldown during stable periods
+
 - **Scale-down**: Occurs when utilization drops below 20%
-- **Idle VM Termination**: VMs are automatically removed after 1 minute of inactivity
+  - Only removes one VM at a time to prevent over-scaling
+  - Respects the same cooldown periods as scale-up
+
+#### Idle VM Management
+- **Idle VM Termination**: VMs are automatically removed after 40 seconds of inactivity
   - A VM is considered idle when it has no running cloudlets
   - Last activity time is tracked for each VM
   - Memory is properly deallocated before VM termination
+  - Ensures efficient resource utilization by removing underutilized instances
+
+#### VM Consolidation & Migration
+- **Automatic VM Consolidation**:
+  - Runs periodically to identify underutilized VMs
+  - Targets VMs with 2 or fewer cloudlets
+  - Migrates cloudlets to more suitable VMs when possible
+  - Removes empty VMs after successful migration
+
+- **Live Migration Process**:
+  1. Identifies underutilized VMs
+  2. For each cloudlet on the VM:
+     - Finds a suitable target VM using the current load balancing algorithm
+     - Migrates the cloudlet if a better target is found
+     - Rolls back if migration fails
+  3. Removes the source VM if empty after migration
+
+- **Migration Safety**:
+  - Uses locking to ensure thread safety
+  - Maintains cloudlet state during migration
+  - Preserves execution context (restarts timers if needed)
+  - Logs all migration attempts and rollbacks
+
+#### Monitoring & Logging
+- Real-time resource utilization tracking
+- Detailed logging of all scaling and migration events
+- Adaptive cooldown periods based on system load
+- Consolidated logging to prevent duplicate entries
 
 ## Advanced Configuration
 
