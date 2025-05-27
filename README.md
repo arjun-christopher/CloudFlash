@@ -66,7 +66,10 @@ CloudFlash implements intelligent load balancing to distribute cloudlets across 
 - **Predictive Scaling**: Advanced machine learning-based scaling decisions
   - Uses historical resource usage patterns to forecast future needs
   - Triggers scaling based on predicted resource utilization
-  - Checks every 20 seconds with 5 data points for accurate predictions
+  - Checks every 40 seconds with 5 data points for accurate predictions
+  - Maximum 10 predictive VMs per system
+  - Prevents over-provisioning by capping VM count
+  - Scale-up prevented when max VM limit is reached
 - **Resource Thresholds**:
   - CPU: Scale up when predicted usage > 80%
   - RAM: Scale up when predicted usage > 75%
