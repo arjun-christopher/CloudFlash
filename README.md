@@ -23,8 +23,15 @@ A comprehensive cloud resource management system with real-time monitoring, auto
   - **Green**: On track with SLA (more than 50% of execution time remaining)
   - **Orange**: Approaching deadline (20-50% of execution time remaining for medium/high priority, or <20% for low priority)
   - **Red**: Critical (less than 20% of execution time remaining for high priority)
-- Progress bar shows completion percentage and time remaining
+- Progress bar shows completion percentage and time remaining (240px wide for better visibility)
 - Automatic status updates as cloudlets progress through their lifecycle
+- Detailed logging for cloudlet lifecycle:
+  - [STARTED]: When cloudlet begins execution
+  - [ALLOCATED]: When cloudlet is assigned to a VM
+  - [COMPLETED]: When cloudlet finishes execution
+  - [DEADLINE MISSED]: When cloudlet fails to complete on time
+  - [SLA ESCALATED]: When cloudlet's priority is increased due to time constraints
+  - [SLA WARNING]: When cloudlet is approaching its deadline
 
 ### Load Balancing
 CloudFlash implements intelligent load balancing to distribute cloudlets across available VMs efficiently:
@@ -56,10 +63,25 @@ CloudFlash implements intelligent load balancing to distribute cloudlets across 
 - Automatic defragmentation when fragmentation exceeds thresholds
 
 ### Auto-scaling & Optimization
-- **Adaptive Cooldown**: Dynamic cooldown periods based on system load
-- **Intelligent Scaling**: Scale up at 80% utilization, down at 20%
-- **Idle VM Cleanup**: Automatic removal after 1 minute of inactivity
-- **Resource Optimization**: Smart allocation based on workload patterns
+- **Predictive Scaling**: Advanced machine learning-based scaling decisions
+  - Uses historical resource usage patterns to forecast future needs
+  - Triggers scaling based on predicted resource utilization
+  - Checks every 20 seconds with 5 data points for accurate predictions
+- **Resource Thresholds**:
+  - CPU: Scale up when predicted usage > 80%
+  - RAM: Scale up when predicted usage > 75%
+  - Storage: Scale up when predicted usage > 85%
+  - Bandwidth: Scale up when predicted usage > 80%
+- **New VM Configuration**:
+  - 4 CPU cores
+  - 8GB RAM
+  - 100GB Storage
+  - 1000Mbps Bandwidth
+  - 1 GPU unit
+- **Smart Allocation**: Resources allocated based on:
+  - Workload requirements
+  - Priority levels
+  - Historical usage patterns
 - **Real-time Metrics**: Live updates of resource utilization
 - **Threshold Alerts**: Notifications for critical resource levels
 
@@ -145,26 +167,30 @@ The memory management panel provides detailed insights into your system's memory
 
 CloudFlash implements intelligent auto-scaling with these features:
 
-#### Scaling Policies
-- **Scale Up**: Triggers when resource usage exceeds 80%
-- **Scale Down**: Occurs when usage drops below 20%
-- **Adaptive Cooldown**: Dynamic cooldown periods based on:
-  - Current system load
-  - Historical patterns
-  - Resource contention levels
+#### Predictive Scaling
+- **Resource Forecast**: Uses machine learning models to predict future resource needs
+- **Training Data**: Collects historical usage patterns every 20 seconds
+- **Prediction Window**: Uses 5 data points for accurate predictions
+- **Decision Making**: Makes scaling decisions based on predicted resource utilization
 
-#### Resource Management
-- **Idle VM Cleanup**: Inactive VMs removed after 1 minute
-- **Smart Allocation**: Resources allocated based on:
-  - Workload requirements
-  - Priority levels
-  - Historical usage patterns
-- **Fragmentation Control**: Automatic defragmentation when needed
+#### Scaling Policies
+- **Scale Up**: Triggers when predicted resource usage exceeds thresholds:
+  - CPU: 80%
+  - RAM: 75%
+  - Storage: 85%
+  - Bandwidth: 80%
+- **New VM Specification**:
+  - 4 CPU cores
+  - 8GB RAM
+  - 100GB Storage
+  - 1000Mbps Bandwidth
+  - 1 GPU unit
 
 #### Real-time Adjustments
 - Continuous monitoring of resource utilization
 - Immediate response to workload changes
-- Predictive scaling based on trends
+- Predictive scaling based on historical trends
+- Detailed logging of scaling operations
 
 Access these metrics through the CloudFlash monitoring dashboard at http://localhost:5000/prometheus
 
@@ -385,4 +411,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last updated: May 26, 2025*
+*Last updated: May 27, 2025*
