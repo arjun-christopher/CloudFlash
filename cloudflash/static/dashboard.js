@@ -433,10 +433,14 @@ function updateCharts(metrics) {
         let progressBar = '';
         let progressText = '';
         
-        if (cl.status === 'COMPLETED' || cl.status === 'FAILED') {
-            // For completed/failed cloudlets, show full green bar
+        if (cl.status === 'COMPLETED') {
+            // For completed cloudlets, show full green bar
             progressBar = '<div class="progress-bar-container"><div class="progress-bar" style="width: 100%; background: #4CAF50;"></div></div>';
             progressText = '100%';
+        } else if (cl.status === 'FAILED') {
+            // For failed cloudlets, show full red bar
+            progressBar = '<div class="progress-bar-container"><div class="progress-bar" style="width: 100%; background: #f44336;"></div></div>';
+            progressText = 'FAILED';
         } else if (cl.status === 'ACTIVE' && cl.start_time) {
             const now = Date.now() / 1000; // Current time in seconds
             const startTime = parseFloat(cl.start_time);
