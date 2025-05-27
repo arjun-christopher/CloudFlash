@@ -553,6 +553,8 @@ class ResourceManager:
             self.last_adaptive_cooldown = adaptive_cooldown  # <- for dashboard visibility
             
             if should_scale_up:
+                if not self.pending_queue and avg_utilization < 0.8:
+                    return
                 self._scale_up()
                 self.last_scaling_time = now
                 self._log_scaling_event(
