@@ -74,16 +74,25 @@ function submitCloudlet() {
     const ramUnit = document.getElementById('cloudletRamUnit').options[document.getElementById('cloudletRamUnit').selectedIndex].text;
     const storageUnit = document.getElementById('cloudletStorageUnit').options[document.getElementById('cloudletStorageUnit').selectedIndex].text;
     const sla_priority = document.getElementById('cloudletSLA').value;
-    const deadline = document.getElementById('cloudletDeadline').value;
+    const deadline = parseFloat(document.getElementById('cloudletDeadline').value);
+    const execution_time = parseFloat(document.getElementById('cloudletExecTime').value);
+    
+    // Validate that execution time doesn't exceed deadline
+    if (execution_time > deadline) {
+        showErrorPopup('Error: Execution time cannot exceed the deadline');
+        addLog(`Error: Execution time (${execution_time}s) cannot exceed deadline (${deadline}s)`);
+        return;
+    }
+    
     fetch('/api/cloudlets', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name, cpu, ram, storage, bandwidth, gpu, sla_priority, deadline})
+        body: JSON.stringify({name, cpu, ram, storage, bandwidth, gpu, sla_priority, deadline, execution_time})
     })
     .then(res => res.json())
     .then(data => {
         if (data.status === 'success') {
-            addLog(`Cloudlet submitted: ${data.cloudlet_id} [${cpu} CPU, ${document.getElementById('cloudletRam').value} ${ramUnit} RAM, ${document.getElementById('cloudletStorage').value} ${storageUnit} Storage, ${bandwidth} Mbps Bandwidth, ${gpu} GPU, SLA ${sla_priority}, Deadline ${deadline}s]`);
+            addLog(`Cloudlet submitted: ${data.cloudlet_id} [${cpu} CPU, ${document.getElementById('cloudletRam').value} ${ramUnit} RAM, ${document.getElementById('cloudletStorage').value} ${storageUnit} Storage, ${bandwidth} Mbps Bandwidth, ${gpu} GPU, SLA ${sla_priority}, Deadline ${deadline}s, Exec Time ${execution_time}s]`);
             showSuccessPopup('Cloudlet submitted successfully!');
         } else {
             addLog(`Error submitting cloudlet: ${data.error}`);
@@ -419,6 +428,56 @@ function updateCharts(metrics) {
         if (cl.status === 'ACTIVE') {
             actions = `<button onclick="completeCloudletById('${cl.id}')" style="color:#fff;background:#43a047;border:none;padding:2px 8px;margin-right:6px;border-radius:4px;cursor:pointer;">Complete</button>` + actions;
         }
+        
+        // Calculate progress and determine color based on SLA priority and time remaining
+        let progressBar = '';
+        let progressText = '';
+        
+        if (cl.status === 'COMPLETED' || cl.status === 'FAILED') {
+            // For completed/failed cloudlets, show full green bar
+            progressBar = '<div class="progress-bar-container"><div class="progress-bar" style="width: 100%; background: #4CAF50;"></div></div>';
+            progressText = '100%';
+        } else if (cl.status === 'ACTIVE' && cl.start_time) {
+            const now = Date.now() / 1000; // Current time in seconds
+            const startTime = parseFloat(cl.start_time);
+            let progress = 0;
+            let timeLeft = 0;
+            let color = '#4CAF50'; // Default green
+            
+            // Get execution time from cloudlet (default to 30s if not provided)
+            const executionTime = parseFloat(cl.execution_time) || 30;
+            
+            // Calculate progress based on time elapsed since start
+            const elapsed = Math.max(0, now - startTime);
+            progress = Math.min(100, (elapsed / executionTime) * 100);
+            timeLeft = Math.max(0, executionTime - elapsed);
+            
+            // Get SLA priority (default to 2 if not provided)
+            const slaPriority = parseInt(cl.sla_priority) || 2;
+            
+            // Calculate time percentage remaining
+            const timePercentage = ((executionTime - elapsed) / executionTime) * 100;
+            
+            // Determine color based on SLA priority and time remaining
+            if (timePercentage < 20) {
+                color = slaPriority >= 3 ? '#f44336' : '#ff9800'; // Red for high priority, orange for others
+            } else if (timePercentage < 50) {
+                color = slaPriority >= 2 ? '#ff9800' : '#4CAF50'; // Orange for medium/high, green for low
+            }
+            
+            progressBar = `
+                <div class="progress-bar-container" title="${Math.round(progress)}% complete (${timeLeft.toFixed(1)}s remaining)">
+                    <div class="progress-bar" style="width: ${progress}%; background: ${color};">
+                        <span class="progress-text">${Math.round(progress)}%</span>
+                    </div>
+                </div>
+            `;
+            progressText = `${Math.round(progress)}%`;
+        } else {
+            progressBar = '<div class="progress-bar-container"><div class="progress-bar" style="width: 0%; background: #9e9e9e;"></div></div>';
+            progressText = '0%';
+        }
+        
         cloudletTableBody.innerHTML += `
             <tr style="${cl.time_critical && cl.status !== 'COMPLETED' ? 'color: red; font-weight: bold; text-shadow: 0 0 3px red;' : ''}">
                 <td>${cl.name}</td>
@@ -429,6 +488,7 @@ function updateCharts(metrics) {
                 <td>${cl.bandwidth}</td>
                 <td>${cl.gpu}</td>
                 <td>${cl.status.charAt(0).toUpperCase() + cl.status.slice(1).toLowerCase()}</td>
+                <td>${progressBar}</td>
                 <td>${actions}</td>
             </tr>
         `;

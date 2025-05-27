@@ -1,22 +1,16 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from core import ResourceManager, VM, Cloudlet
 from flask_socketio import SocketIO, emit
-from prometheus_client import make_wsgi_app, Gauge, Counter, Histogram
+from prometheus_client import make_wsgi_app, Gauge, Histogram
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 import threading
-import json
-import atexit
-import signal
 import sys
 import subprocess
-import traceback
 import socket
 import requests
-import psutil
 import os
 from pathlib import Path
 import time
-from typing import Optional, List, Dict, Any
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
@@ -351,7 +345,6 @@ def create_vm():
             return jsonify({"status": "error", "error": str(e)}), 400
 
 @app.route("/api/cloudlets", methods=["POST"])
-@app.route("/api/cloudlets", methods=["POST"])
 def submit_cloudlet():
     with REQUEST_TIME.labels(endpoint='/api/cloudlets', method='POST').time():
         data = request.json
@@ -363,9 +356,21 @@ def submit_cloudlet():
             gpu = int(data.get("gpu", 0))
             sla_priority = int(data.get("sla_priority", 2))
             deadline = int(data.get("deadline", 60))
+            execution_time = float(data.get("execution_time", 5.0))  # Default 5 seconds
             name = data.get("name")
             
-            cloudlet = Cloudlet(cpu, ram, storage, sla_priority, deadline, name, bandwidth, gpu)
+            cloudlet = Cloudlet(
+                cpu=cpu, 
+                ram=ram, 
+                storage=storage, 
+                sla_priority=sla_priority, 
+                deadline=deadline, 
+                name=name, 
+                bandwidth=bandwidth, 
+                gpu=gpu,
+                execution_time=execution_time
+            )
+            
             manager.submit_cloudlet(cloudlet)
             socketio.emit('metrics_update', manager.get_metrics())
             return jsonify({"status": "success", "cloudlet_id": cloudlet.id}), 201
@@ -373,7 +378,6 @@ def submit_cloudlet():
             print("Error in /api/cloudlets:", e)
             return jsonify({"status": "error", "error": str(e)}), 400
 
-@app.route("/api/cloudlets/complete", methods=["POST"])
 @app.route("/api/cloudlets/complete", methods=["POST"])
 def complete_cloudlet():
     with REQUEST_TIME.labels(endpoint='/api/cloudlets/complete', method='POST').time():
@@ -383,7 +387,6 @@ def complete_cloudlet():
         socketio.emit('metrics_update', manager.get_metrics())
         return jsonify({"status": "success"})
 
-@app.route("/api/cloudlets/<cloudlet_id>", methods=["DELETE"])
 @app.route("/api/cloudlets/<cloudlet_id>", methods=["DELETE"])
 def delete_cloudlet(cloudlet_id):
     with REQUEST_TIME.labels(endpoint='/api/cloudlets/<cloudlet_id>', method='DELETE').time():
@@ -399,7 +402,6 @@ def delete_cloudlet(cloudlet_id):
             return jsonify({"status": "error", "error": str(e)}), 400
 
 @app.route("/api/vms/<vm_id>", methods=["DELETE"])
-@app.route("/api/vms/<vm_id>", methods=["DELETE"])
 def delete_vm(vm_id):
     with REQUEST_TIME.labels(endpoint='/api/vms/<vm_id>', method='DELETE').time():
         try:
@@ -414,18 +416,15 @@ def delete_vm(vm_id):
             return jsonify({"status": "error", "error": str(e)}), 400
 
 @app.route("/api/metrics", methods=["GET"])
-@app.route("/api/metrics", methods=["GET"])
 def get_metrics():
     with REQUEST_TIME.labels(endpoint='/api/metrics', method='GET').time():
         return jsonify(manager.get_metrics())
 
 @app.route("/api/vms", methods=["GET"])
-@app.route("/api/vms", methods=["GET"])
 def list_vms():
     with REQUEST_TIME.labels(endpoint='/api/vms', method='GET').time():
         return jsonify(manager.get_metrics()["vms"])
 
-@app.route("/api/cloudlets", methods=["GET"])
 @app.route("/api/cloudlets", methods=["GET"])
 def list_cloudlets():
     with REQUEST_TIME.labels(endpoint='/api/cloudlets', method='GET').time():

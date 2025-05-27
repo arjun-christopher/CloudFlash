@@ -523,6 +523,54 @@ tr:nth-child(even) {
     background: #f9fbfd;
 }
 
+/* Progress Bar Styles */
+.progress-bar-container {
+    width: 100px;
+    height: 20px;
+    background-color: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    margin: 5px 0;
+}
+
+.progress-bar {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    position: relative;
+    min-width: 20px;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    font-size: 10px;
+    font-weight: bold;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+}
+
+/* Status Colors */
+.progress-bar[style*="background: #4CAF50"] {
+    background: linear-gradient(90deg, #4CAF50, #66BB6A);
+}
+
+.progress-bar[style*="background: #ff9800"] {
+    background: linear-gradient(90deg, #FFA000, #FFB74D);
+}
+
+.progress-bar[style*="background: #f44336"] {
+    background: linear-gradient(90deg, #E53935, #EF5350);
+}
+
+.progress-bar[style*="background: #9e9e9e"] {
+    background: linear-gradient(90deg, #9e9e9e, #bdbdbd);
+}
+
 .popup {
     position: fixed;
     top: 50%;

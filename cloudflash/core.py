@@ -188,7 +188,7 @@ class VM:
 # --- CLOUDLET CLASS ---
 
 class Cloudlet:
-    def __init__(self, cpu, ram, storage, sla_priority, deadline, name=None, bandwidth=100, gpu=0):
+    def __init__(self, cpu, ram, storage, sla_priority, deadline, name=None, bandwidth=100, gpu=0, execution_time=5.0):
         self.id = str(uuid.uuid4())
         self.name = name or f"Cloudlet-{self.id[:8]}"
         self.cpu = cpu
@@ -198,11 +198,13 @@ class Cloudlet:
         self.gpu = gpu
         self.sla_priority = int(sla_priority)
         self.deadline = time.time() + deadline
+        self.execution_time = float(execution_time)  # in seconds
         self.status = CloudletStatus.WAITING
         self.vm_id = None
         self.creation_time = time.time()
         self.start_time = None
         self.completion_time = None
+        self._completion_timer = None
 
 # --- RESOURCE MANAGER & SCHEDULER ---
 
@@ -343,22 +345,33 @@ class ResourceManager:
 
     def _allocate_cloudlets(self):
         with self.lock:
-            # Prioritize by SLA, then by creation time
-            sorted_queue = sorted(self.pending_queue, key=lambda c: (-c.sla_priority, c.creation_time))
-            for cloudlet in sorted_queue:
-                if cloudlet.status not in [CloudletStatus.WAITING, CloudletStatus.PENDING]:
-                    continue
+            # Process pending queue first
+            while self.pending_queue:
+                cloudlet = self.pending_queue[0]
                 vm = self._find_vm_for_cloudlet(cloudlet)
-                if vm:
-                    allocated = vm.allocate(cloudlet)
-                    if allocated:
-                        cloudlet.status = CloudletStatus.ACTIVE
-                        cloudlet.vm_id = vm.id
-                        cloudlet.start_time = time.time()
-                        self.pending_queue.remove(cloudlet)
+                if not vm:
+                    break  # No suitable VM found
+                
+                if vm.allocate(cloudlet, self.memory_manager):
+                    cloudlet.status = CloudletStatus.ACTIVE
+                    cloudlet.vm_id = vm.id
+                    cloudlet.start_time = time.time()
+                    self.pending_queue.popleft()
+                    
+                    # Start a timer for automatic completion
+                    if cloudlet.execution_time > 0:
+                        cloudlet._completion_timer = threading.Timer(
+                            cloudlet.execution_time,
+                            self.complete_cloudlet,
+                            args=(cloudlet.id,)
+                        )
+                        cloudlet._completion_timer.daemon = True
+                        cloudlet._completion_timer.start()
+                        self.log(f" [Started] {cloudlet.name} on VM {vm.id} (will complete in {cloudlet.execution_time:.1f}s)")
+                    else:
+                        self.log(f" [Allocated] {cloudlet.name} to VM {vm.id}")
                 else:
-                    # If no VM can serve, just mark as pending. Do NOT trigger scaling or create new VMs here.
-                    cloudlet.status = CloudletStatus.PENDING
+                    break  # Couldn't allocate, will try again later
 
     def _find_vm_for_cloudlet(self, cloudlet):
         """
@@ -661,6 +674,13 @@ class ResourceManager:
             if cloudlet.status in [CloudletStatus.WAITING, CloudletStatus.PENDING]:
                 time_left = cloudlet.deadline - now
 
+                # Check if deadline is missed
+                if time_left <= 0:
+                    cloudlet.status = CloudletStatus.FAILED
+                    cloudlet.completion_time = now
+                    self.log(f"❌ [Deadline Missed] {cloudlet.name} failed - missed deadline")
+                    continue
+
                 # Escalate based on urgency
                 if time_left < 5:
                     cloudlet.sla_priority = 3  # Critical
@@ -673,13 +693,28 @@ class ResourceManager:
         with self.lock:
             for cloudlet in self.cloudlets:
                 if cloudlet.id == cloudlet_id and cloudlet.status == CloudletStatus.ACTIVE:
+                    # Cancel any pending timer if it exists
+                    if hasattr(cloudlet, '_completion_timer') and cloudlet._completion_timer:
+                        cloudlet._completion_timer.cancel()
+                    
                     cloudlet.status = CloudletStatus.COMPLETED
                     cloudlet.completion_time = time.time()
+                    
+                    # Log completion
+                    if cloudlet.start_time:
+                        actual_duration = cloudlet.completion_time - cloudlet.start_time
+                        self.log(f"✅ [Completed] {cloudlet.name} in {actual_duration:.2f}s on VM {cloudlet.vm_id}")
+                    
+                    # Deallocate resources
                     for vm in self.vms:
                         if vm.id == cloudlet.vm_id:
                             vm.deallocate(cloudlet, self.memory_manager)
                             break
-            self._allocate_cloudlets()
+                    
+                    # Trigger allocation of pending cloudlets
+                    self._allocate_cloudlets()
+                    return True
+            return False
 
     def delete_cloudlet(self, cloudlet_id):
         with self.lock:
@@ -799,6 +834,7 @@ class ResourceManager:
                         'creation_time': cl.creation_time,
                         'start_time': cl.start_time,
                         'completion_time': cl.completion_time,
+                        'execution_time': cl.execution_time,
                         'time_critical': ((cl.deadline - time.time()) < 10) if cl.status in [CloudletStatus.WAITING, CloudletStatus.PENDING, CloudletStatus.ACTIVE] else False,
                     }
                     for cl in self.cloudlets
