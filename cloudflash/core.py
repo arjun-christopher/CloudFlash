@@ -134,11 +134,21 @@ class VM:
         self.memory_pages: List[int] = []  # Track allocated memory pages
 
     def can_allocate(self, cpu, ram, storage, bandwidth=0, gpu=0, memory_manager=None):
-        if memory_manager:
+        # Only check memory pages if RAM is being requested
+        if memory_manager and ram > 0:
             pages_needed = (ram + memory_manager.PAGE_SIZE - 1) // memory_manager.PAGE_SIZE
             free_pages = sum(1 for allocated in memory_manager.pages if not allocated)
             if free_pages < pages_needed:
                 return False
+                
+        # Check if this is a GPU-only cloudlet (only GPU requested)
+        is_gpu_only = (cpu == 0 and ram == 0 and storage == 0 and bandwidth == 0 and gpu > 0)
+        
+        # For GPU-only cloudlets, only check GPU capacity
+        if is_gpu_only:
+            return self.gpu_capacity - self.gpu_used >= gpu
+            
+        # For regular cloudlets, check all resources
         return (
             self.cpu_capacity - self.cpu_used >= cpu and
             self.ram_capacity - self.ram_used >= ram and
@@ -149,9 +159,8 @@ class VM:
 
     def allocate(self, cloudlet, memory_manager=None):
         with self.lock:
-            if self.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, 
-                              cloudlet.bandwidth, cloudlet.gpu, memory_manager):
-                if memory_manager:
+            if self.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, cloudlet.bandwidth, cloudlet.gpu, memory_manager):
+                if memory_manager and cloudlet.ram > 0:
                     pages = memory_manager.allocate_pages(cloudlet.ram, self.id)
                     if not pages:
                         return False
@@ -384,15 +393,39 @@ class ResourceManager:
             VM object if a suitable VM is found, None otherwise
         """
         algorithm = self.load_balancing_algorithm
-        candidates = [
-            vm for vm in self.vms 
+        is_gpu_only = (cloudlet.cpu == 0 and cloudlet.ram == 0 and 
+                      cloudlet.storage == 0 and cloudlet.bandwidth == 0 and 
+                      cloudlet.gpu > 0)
+        
+        self.log(f"Finding VM for cloudlet {cloudlet.name} (GPU: {cloudlet.gpu}, "
+                f"CPU: {cloudlet.cpu}, RAM: {cloudlet.ram}, "
+                f"Storage: {cloudlet.storage}, Bandwidth: {cloudlet.bandwidth})")
+        
+        # First, try to find a VM that can handle the cloudlet's requirements
+        candidates = []
+        for vm in self.vms:
+            if vm.status == VMStatus.TERMINATED:
+                continue
+                
+            # For GPU-only cloudlets, only check GPU capacity
+            if is_gpu_only:
+                if vm.gpu_capacity - vm.gpu_used >= cloudlet.gpu:
+                    candidates.append(vm)
+                continue
+                
+            # For regular cloudlets, check all requirements
+            if cloudlet.gpu > 0 and vm.gpu_capacity <= 0:
+                continue  # Skip VMs without GPU capacity if GPU is needed
+                
             if vm.can_allocate(cloudlet.cpu, cloudlet.ram, cloudlet.storage, 
-                            cloudlet.bandwidth, cloudlet.gpu, self.memory_manager) 
-            and vm.status != VMStatus.TERMINATED
-        ]
+                            cloudlet.bandwidth, cloudlet.gpu, self.memory_manager):
+                candidates.append(vm)
         
         if not candidates:
+            self.log(f"No suitable VM found for cloudlet {cloudlet.name} (CPU: {cloudlet.cpu}, RAM: {cloudlet.ram}, GPU: {cloudlet.gpu})")
             return None
+            
+        self.log(f"Found {len(candidates)} candidate VMs for cloudlet {cloudlet.name} (GPU: {cloudlet.gpu} required)")
             
         if algorithm == 'round_robin':
             # Simple round-robin distribution
@@ -622,13 +655,29 @@ class ResourceManager:
 
     def _scale_up(self):
         """Create a new VM for scaling up"""
-        new_vm = VM(
-            cpu=4,
-            ram=8,
-            storage=100,
-            bandwidth=1000,
-            gpu=1
-        )
+        # Check if any pending cloudlets need GPU
+        needs_gpu = any(cl.gpu > 0 for cl in self.pending_queue)
+        
+        # If we have pending GPU cloudlets, create a VM with GPU capacity
+        if needs_gpu:
+            new_vm = VM(
+                cpu=4,
+                ram=8,
+                storage=100,
+                bandwidth=1000,
+                gpu=1  # Add GPU capacity
+            )
+            self.log(f"Creating new VM with GPU capacity for pending GPU cloudlets")
+        else:
+            # For non-GPU cloudlets, create a regular VM
+            new_vm = VM(
+                cpu=4,
+                ram=8,
+                storage=100,
+                bandwidth=1000,
+                gpu=0
+            )
+            self.log("Creating new regular VM")
         self.add_vm(new_vm)
         self._log_scaling_event(
             'scale_up', 
@@ -678,16 +727,16 @@ class ResourceManager:
                 if time_left <= 0:
                     cloudlet.status = CloudletStatus.FAILED
                     cloudlet.completion_time = now
-                    self.log(f"❌ [DEADLINE MISSED] {cloudlet.name} failed - missed deadline")
+                    self.log(f"[DEADLINE MISSED] {cloudlet.name} failed - missed deadline")
                     continue
 
                 # Escalate based on urgency
                 if time_left < 5:
                     cloudlet.sla_priority = 3  # Critical
-                    self.log(f"⚠️ [SLA ESCALATED] {cloudlet.name} escalated to Priority 3 (deadline in {time_left:.1f}s)")
+                    self.log(f"[SLA ESCALATED] {cloudlet.name} escalated to Priority 3 (deadline in {time_left:.1f}s)")
                 elif time_left < 15:
                     cloudlet.sla_priority = max(cloudlet.sla_priority, 2)
-                    self.log(f"⏳ [SLA WARNING] {cloudlet.name} elevated to Priority 2 (deadline in {time_left:.1f}s)")
+                    self.log(f"[SLA WARNING] {cloudlet.name} elevated to Priority 2 (deadline in {time_left:.1f}s)")
 
     def complete_cloudlet(self, cloudlet_id):
         with self.lock:
@@ -703,7 +752,7 @@ class ResourceManager:
                     # Log completion
                     if cloudlet.start_time:
                         actual_duration = cloudlet.completion_time - cloudlet.start_time
-                        self.log(f"✅ [COMPLETED] {cloudlet.name} in {actual_duration:.2f}s on VM {cloudlet.vm_id}")
+                        self.log(f"[COMPLETED] {cloudlet.name} in {actual_duration:.2f}s on VM {cloudlet.vm_id}")
                     
                     # Deallocate resources
                     for vm in self.vms:

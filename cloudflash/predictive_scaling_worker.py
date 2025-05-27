@@ -9,7 +9,7 @@ class PredictiveScaler:
         self.predictor = ResourcePredictor()
         self.interval = 40  # seconds
         self.history = []
-        self.max_predictive_vms = 10
+        self.max_predictive_vms = 5
 
     def collect_data(self):
         metrics = self.manager.get_metrics()
@@ -50,9 +50,10 @@ class PredictiveScaler:
             predicted_storage > 85 or 
             predicted_bandwidth > 80
         ):
-            new_vm = VM(cpu=4, ram=8, storage=100, bandwidth=1000, gpu=1)
-            self.manager.add_vm(new_vm)
-            self.manager.log(f"[PREDICTIVE-SCALER] Scaled up with new VM {new_vm.id}")
+            if len(self.manager.vms) < self.max_predictive_vms:
+                new_vm = VM(cpu=4, ram=8, storage=100, bandwidth=1000, gpu=1)
+                self.manager.add_vm(new_vm)
+                self.manager.log(f"[PREDICTIVE-SCALER] Scaled up with new VM {new_vm.id}")
 
     def start(self):
         def run():

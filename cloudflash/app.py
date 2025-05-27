@@ -351,17 +351,49 @@ def create_vm():
 def submit_cloudlet():
     with REQUEST_TIME.labels(endpoint='/api/cloudlets', method='POST').time():
         data = request.json
+        
+        # Check if required fields are present
+        required_fields = ["cpu", "ram", "storage"]
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            return jsonify({
+                "status": "error",
+                "error": f"Missing required fields: {', '.join(missing_fields)}"
+            }), 400
+            
         try:
-            cpu = int(data.get("cpu"))
-            ram = int(data.get("ram"))
-            storage = int(data.get("storage"))
-            bandwidth = int(data.get("bandwidth", 100))
-            gpu = int(data.get("gpu", 0))
-            sla_priority = int(data.get("sla_priority", 2))
-            deadline = int(data.get("deadline", 60))
-            execution_time = float(data.get("execution_time", 5.0))  # Default 5 seconds
+            # Validate and convert numeric fields
+            def get_positive_int(key, default=0, min_val=0):
+                value = data.get(key, default)
+                try:
+                    num = int(value)
+                    if num < min_val:
+                        raise ValueError(f"{key} must be at least {min_val}")
+                    return num
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid value for {key}: must be a positive integer")
+            
+            def get_positive_float(key, default=0.0, min_val=0.0):
+                value = data.get(key, default)
+                try:
+                    num = float(value)
+                    if num < min_val:
+                        raise ValueError(f"{key} must be at least {min_val}")
+                    return num
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid value for {key}: must be a positive number, given input {value}")
+            
+            cpu = get_positive_int("cpu", min_val=0)
+            ram = get_positive_int("ram", min_val=0)
+            storage = get_positive_int("storage", min_val=0)
+            bandwidth = get_positive_int("bandwidth", default=100, min_val=0)
+            gpu = get_positive_int("gpu", default=0, min_val=0)
+            sla_priority = get_positive_int("sla_priority", default=2, min_val=0)
+            deadline = get_positive_int("deadline", default=60, min_val=0)
+            execution_time = get_positive_float("execution_time", default=10, min_val=1)
             name = data.get("name")
             
+            # Create and submit cloudlet
             cloudlet = Cloudlet(
                 cpu=cpu, 
                 ram=ram, 
@@ -376,10 +408,20 @@ def submit_cloudlet():
             
             manager.submit_cloudlet(cloudlet)
             socketio.emit('metrics_update', manager.get_metrics())
-            return jsonify({"status": "success", "cloudlet_id": cloudlet.id}), 201
+            return jsonify({
+                "status": "success", 
+                "cloudlet_id": cloudlet.id,
+                "message": f"Cloudlet {cloudlet.name} submitted successfully"
+            }), 201
+            
+        except ValueError as ve:
+            return jsonify({"status": "error", "error": str(ve)}), 400
         except Exception as e:
-            print("Error in /api/cloudlets:", e)
-            return jsonify({"status": "error", "error": str(e)}), 400
+            print("Error in /api/cloudlets:", str(e))
+            return jsonify({
+                "status": "error", 
+                "error": "An unexpected error occurred while processing your request"
+            }), 500
 
 @app.route("/api/cloudlets/complete", methods=["POST"])
 def complete_cloudlet():

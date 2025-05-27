@@ -84,10 +84,29 @@ function submitCloudlet() {
         return;
     }
     
+    // Prepare cloudlet data
+    const cloudletData = {
+        name: name || `Cloudlet-${Date.now()}`,
+        cpu: parseInt(cpu) || 0,
+        ram: parseInt(ram) || 0,
+        storage: parseInt(storage) || 0,
+        bandwidth: parseInt(bandwidth) || 0,
+        gpu: parseInt(gpu) || 0,
+        sla_priority: parseInt(sla_priority) || 2,
+        deadline: parseInt(deadline) || 60,
+        execution_time: parseFloat(execution_time) || 10.0
+    };
+    
+    // For GPU-only cloudlets, ensure at least some minimal resources are requested
+    if (cloudletData.gpu > 0 && cloudletData.cpu === 0) {
+        cloudletData.cpu = 1;  // Request at least 1 CPU core
+        addLog("Note: Added minimal CPU (1) for GPU cloudlet");
+    }
+    
     fetch('/api/cloudlets', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name, cpu, ram, storage, bandwidth, gpu, sla_priority, deadline, execution_time})
+        body: JSON.stringify(cloudletData)
     })
     .then(res => res.json())
     .then(data => {
