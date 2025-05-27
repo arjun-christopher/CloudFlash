@@ -525,7 +525,7 @@ tr:nth-child(even) {
 
 /* Progress Bar Styles */
 .progress-bar-container {
-    width: 100px;
+    width: 110px;
     height: 20px;
     background-color: #f0f0f0;
     border-radius: 10px;

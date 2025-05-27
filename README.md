@@ -17,8 +17,14 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 ### Cloudlet Management
 - Submit compute tasks with specific resource requirements
 - Set SLA priorities and execution deadlines
-- Track cloudlet lifecycle from submission to completion
+- Track cloudlet lifecycle from submission to completion with real-time progress tracking
 - Monitor resource consumption per cloudlet
+- Visual progress indicators with SLA-based coloring:
+  - **Green**: On track with SLA (more than 50% of execution time remaining)
+  - **Orange**: Approaching deadline (20-50% of execution time remaining for medium/high priority, or <20% for low priority)
+  - **Red**: Critical (less than 20% of execution time remaining for high priority)
+- Progress bar shows completion percentage and time remaining
+- Automatic status updates as cloudlets progress through their lifecycle
 
 ### Load Balancing
 CloudFlash implements intelligent load balancing to distribute cloudlets across available VMs efficiently:
