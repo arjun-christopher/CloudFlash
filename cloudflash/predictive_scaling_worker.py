@@ -7,8 +7,9 @@ class PredictiveScaler:
     def __init__(self, manager):
         self.manager = manager
         self.predictor = ResourcePredictor()
-        self.interval = 20  # seconds
+        self.interval = 40  # seconds
         self.history = []
+        self.max_predictive_vms = 10
 
     def collect_data(self):
         metrics = self.manager.get_metrics()
@@ -36,6 +37,12 @@ class PredictiveScaler:
         self.manager.log(
             f"[PREDICTIVE-SCALER] CPU: {predicted_cpu:.1f}%, RAM: {predicted_ram:.1f}%, Storage: {predicted_storage:.1f}%, Bandwidth: {predicted_bandwidth:.1f}%"
         )
+
+        # Check total VMs before scaling
+        current_vm_count = len(self.manager.get_vms())
+        if current_vm_count >= self.max_predictive_vms:
+            self.manager.log(f"[PREDICTIVE-SCALER] Max VM cap ({self.max_predictive_vms}) reached. Skipping scale-up.")
+            return
 
         if (
             predicted_cpu > 80 or 
