@@ -367,9 +367,9 @@ class ResourceManager:
                         )
                         cloudlet._completion_timer.daemon = True
                         cloudlet._completion_timer.start()
-                        self.log(f" [Started] {cloudlet.name} on VM {vm.id} (will complete in {cloudlet.execution_time:.1f}s)")
+                        self.log(f" [STARTED] {cloudlet.name} on VM {vm.id} (will complete in {cloudlet.execution_time:.1f}s)")
                     else:
-                        self.log(f" [Allocated] {cloudlet.name} to VM {vm.id}")
+                        self.log(f" [ALLOCATED] {cloudlet.name} to VM {vm.id}")
                 else:
                     break  # Couldn't allocate, will try again later
 
@@ -678,16 +678,16 @@ class ResourceManager:
                 if time_left <= 0:
                     cloudlet.status = CloudletStatus.FAILED
                     cloudlet.completion_time = now
-                    self.log(f"❌ [Deadline Missed] {cloudlet.name} failed - missed deadline")
+                    self.log(f"❌ [DEADLINE MISSED] {cloudlet.name} failed - missed deadline")
                     continue
 
                 # Escalate based on urgency
                 if time_left < 5:
                     cloudlet.sla_priority = 3  # Critical
-                    self.log(f"⚠️ [SLA Escalation] {cloudlet.name} escalated to Priority 3 (deadline in {time_left:.1f}s)")
+                    self.log(f"⚠️ [SLA ESCALATED] {cloudlet.name} escalated to Priority 3 (deadline in {time_left:.1f}s)")
                 elif time_left < 15:
                     cloudlet.sla_priority = max(cloudlet.sla_priority, 2)
-                    self.log(f"⏳ [SLA Warning] {cloudlet.name} elevated to Priority 2 (deadline in {time_left:.1f}s)")
+                    self.log(f"⏳ [SLA WARNING] {cloudlet.name} elevated to Priority 2 (deadline in {time_left:.1f}s)")
 
     def complete_cloudlet(self, cloudlet_id):
         with self.lock:
@@ -703,7 +703,7 @@ class ResourceManager:
                     # Log completion
                     if cloudlet.start_time:
                         actual_duration = cloudlet.completion_time - cloudlet.start_time
-                        self.log(f"✅ [Completed] {cloudlet.name} in {actual_duration:.2f}s on VM {cloudlet.vm_id}")
+                        self.log(f"✅ [COMPLETED] {cloudlet.name} in {actual_duration:.2f}s on VM {cloudlet.vm_id}")
                     
                     # Deallocate resources
                     for vm in self.vms:

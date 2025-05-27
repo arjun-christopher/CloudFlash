@@ -373,7 +373,7 @@ function updateCharts(metrics) {
         cloudletChart = new Chart(document.getElementById('cloudletChart'), {
             type: 'doughnut',
             data: {
-                labels: Object.keys(statusCounts),
+                labels: Object.keys(statusCounts).map(label => label.charAt(0).toUpperCase() + label.slice(1).toLowerCase()),
                 datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#1976d2', '#64b5f6', '#90caf9', '#43a047', '#e53935'] }]
             }
         });

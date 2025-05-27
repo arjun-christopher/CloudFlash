@@ -11,6 +11,7 @@ import requests
 import os
 from pathlib import Path
 import time
+from predictive_scaling_worker import PredictiveScaler
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
@@ -18,6 +19,8 @@ socketio = SocketIO(app)
 
 # Initialize resource manager
 manager = ResourceManager()
+predictive_scaler = PredictiveScaler(manager)
+predictive_scaler.start()
 
 # Monitoring configuration
 MONITORING_DIR = Path(__file__).parent / 'monitoring'
@@ -472,7 +475,6 @@ class AutoScaler:
             return 0
         return sum(vm["cpu_usage"] for vm in vms) / len(vms)
 
-@app.route('/metrics')
 @app.route('/metrics')
 def metrics():
     return make_wsgi_app()

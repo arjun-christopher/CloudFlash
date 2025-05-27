@@ -30,3 +30,8 @@ black==23.7.0
 flake8==6.0.0
 mypy==1.4.1
 pylint==2.17.4
+
+# Machine Learning
+scikit-learn==1.5.2
+numpy==1.24.4
+pandas==2.0.3
