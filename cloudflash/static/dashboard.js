@@ -651,6 +651,7 @@ function applyCloudletPreset() {
         document.getElementById('cloudletGpu').value = 0;
         document.getElementById('cloudletSLA').value = 2;
         document.getElementById('cloudletDeadline').value = 60;
+        document.getElementById('cloudletExecTime').value = 10;
     } else if (preset === 'moderate') {
         document.getElementById('cloudletCpu').value = 2;
         document.getElementById('cloudletRam').value = 4;
@@ -661,6 +662,7 @@ function applyCloudletPreset() {
         document.getElementById('cloudletGpu').value = 0;
         document.getElementById('cloudletSLA').value = 2;
         document.getElementById('cloudletDeadline').value = 90;
+        document.getElementById('cloudletExecTime').value = 40;
     } else if (preset === 'heavy') {
         document.getElementById('cloudletCpu').value = 4;
         document.getElementById('cloudletRam').value = 8;
@@ -671,6 +673,7 @@ function applyCloudletPreset() {
         document.getElementById('cloudletGpu').value = 1;
         document.getElementById('cloudletSLA').value = 3;
         document.getElementById('cloudletDeadline').value = 120;
+        document.getElementById('cloudletExecTime').value = 60;
     }
 }
 

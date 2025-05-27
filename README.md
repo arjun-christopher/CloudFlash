@@ -260,9 +260,12 @@ Access these metrics through the CloudFlash monitoring dashboard at http://local
 
 ### Auto-scaling
 - The system automatically scales based on resource utilization
-- Scale-up triggers at 80% resource usage
-- Scale-down occurs below 20% utilization
-- Idle VMs are automatically removed after 2 minutes
+- **Scale-up**: Triggers when resource usage exceeds 80%
+- **Scale-down**: Occurs when utilization drops below 20%
+- **Idle VM Termination**: VMs are automatically removed after 1 minute of inactivity
+  - A VM is considered idle when it has no running cloudlets
+  - Last activity time is tracked for each VM
+  - Memory is properly deallocated before VM termination
 
 ## Advanced Configuration
 
