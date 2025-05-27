@@ -222,7 +222,7 @@ class ResourceManager:
         # Auto-scaling configuration
         self.SCALING_UP_THRESHOLD = 0.8  # Scale up when utilization exceeds 80%
         self.SCALING_DOWN_THRESHOLD = 0.2  # Scale down when utilization is below 20%
-        self.IDLE_TIME_THRESHOLD = 60  # 1 minutes in seconds
+        self.IDLE_TIME_THRESHOLD = 40  # 40 seconds in seconds
         self.SCALING_COOLDOWN = 10  # 10 seconds cooldown between scaling operations
         
         # Base cooldown in seconds
@@ -342,6 +342,7 @@ class ResourceManager:
 
     def _monitor(self):
         while True:
+            self._attempt_vm_consolidation()
             self._allocate_cloudlets()
             self._scale_vms()
             self._check_deadlines()
@@ -557,21 +558,10 @@ class ResourceManager:
                     return
                 self._scale_up()
                 self.last_scaling_time = now
-                self._log_scaling_event(
-                    event_type="SCALE_UP",
-                    message="Scaled up VM due to high resource usage",
-                    utilization=utilization,
-                    cooldown=adaptive_cooldown
-                )
+
             elif should_scale_down:
                 self._scale_down()
                 self.last_scaling_time = now
-                self._log_scaling_event(
-                    event_type="SCALE_DOWN",
-                    message="Scaled down VM due to under-utilization",
-                    utilization=utilization,
-                    cooldown=adaptive_cooldown
-                )
 
             # Log current utilization
             self._log_scaling_event(
@@ -587,10 +577,6 @@ class ResourceManager:
                 },
                 cooldown=getattr(self, 'last_adaptive_cooldown', self.BASE_COOLDOWN)
             )
-
-            print("Utilization:", {k: f"{v:.2%}" for k, v in utilization.items()})
-            print("Spike Deltas:", spike_deltas)
-            print("Cooldown:", adaptive_cooldown, "seconds")
 
             if now - self.last_scaling_time < adaptive_cooldown:
                 return  # Still in cooldown
@@ -740,6 +726,43 @@ class ResourceManager:
                     cloudlet.sla_priority = max(cloudlet.sla_priority, 2)
                     self.log(f"[SLA WARNING] {cloudlet.name} elevated to Priority 2 (deadline in {time_left:.1f}s)")
 
+    def _attempt_vm_consolidation(self):
+        migrated_cloudlets = set()  # Track cloudlets already migrated in this cycle
+
+        for vm in self.vms[:]:  # Copy the list to safely remove VMs
+            if vm.status == VMStatus.RUNNING and len(vm.cloudlets) <= 2:
+                movable = list(vm.cloudlets)
+
+                for cloudlet_id in movable:
+                    if cloudlet_id in migrated_cloudlets:
+                        continue  # Skip if already migrated this cycle
+
+                    cloudlet = next((cl for cl in self.cloudlets if cl.id == cloudlet_id), None)
+                    if cloudlet:
+                        target_vm = self._find_vm_for_cloudlet(cloudlet)
+                        if target_vm and target_vm.id != vm.id:
+                            # Deallocate from source VM
+                            vm.deallocate(cloudlet, self.memory_manager)
+
+                            # Try allocating on target VM
+                            success = target_vm.allocate(cloudlet, self.memory_manager)
+                            if success:
+                                cloudlet.vm_id = target_vm.id
+                                cloudlet.start_time = time.time()  # Optional: restart timer if needed
+                                migrated_cloudlets.add(cloudlet.id)
+                                self.log(f"[MIGRATION] {cloudlet.name} migrated from VM {vm.id} to VM {target_vm.id}")
+                            else:
+                                # Rollback: re-allocate on original VM if migration fails
+                                vm.allocate(cloudlet, self.memory_manager)
+                                self.log(f"[ROLLBACK] {cloudlet.name} migration to VM {target_vm.id} failed. Rolled back to VM {vm.id}")
+
+                # If original VM is now empty, remove it
+                if not vm.cloudlets:
+                    self.vms.remove(vm)
+                    self.memory_manager.deallocate_pages(vm.memory_pages)
+                    vm.memory_pages.clear()
+                    self.log(f"[CONSOLIDATION] Removed underutilized VM {vm.id}")
+                
     def complete_cloudlet(self, cloudlet_id):
         with self.lock:
             for cloudlet in self.cloudlets:
