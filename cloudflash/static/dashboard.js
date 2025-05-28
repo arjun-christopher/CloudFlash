@@ -432,6 +432,14 @@ function updateCharts(metrics) {
                 <td>${vm.bandwidth_capacity}</td>
                 <td>${vm.gpu_capacity}</td>
                 <td>${vm.status.charAt(0).toUpperCase() + vm.status.slice(1).toLowerCase()}</td>
+                <td>
+                    <span class="badge ${vm.firewall_enabled ? 'secure' : 'insecure'}">
+                        ${vm.firewall_enabled ? 'Firewall' : 'No Firewall'}
+                    </span><br>
+                    <span class="badge ${vm.isolation_level === 'STRICT' ? 'strict' : 'standard'}">
+                        ${vm.isolation_level.toLowerCase().replace(/^\w/, c => c.toUpperCase())}
+                    </span>
+                </td>
                 <td><button onclick="deleteVmById('${vm.id}')" style="color:#fff;background:#e53935;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;">Delete</button></td>
             </tr>
         `;
@@ -748,3 +756,14 @@ if (document.readyState === 'loading') {
     // DOM is already ready, initialize immediately
     initializeApp();
 }
+
+function toggleIsolationDropdown() {
+    const firewallCheckbox = document.getElementById("vmFirewall");
+    const isolationDropdown = document.getElementById("vmIsolation");
+    isolationDropdown.disabled = !firewallCheckbox.checked;
+}
+
+// Ensure it's set correctly on page load
+document.addEventListener("DOMContentLoaded", () => {
+    toggleIsolationDropdown();
+});

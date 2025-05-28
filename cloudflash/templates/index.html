@@ -83,7 +83,7 @@
                     <h3>Security Settings</h3>
                     <div class="security-option">
                         <label>
-                            <input type="checkbox" id="vmFirewall" checked>
+                            <input type="checkbox" id="vmFirewall" checked onchange="toggleIsolationDropdown()">
                             Enable Firewall
                             <span class="security-info">Protects VM from unauthorized access</span>
                         </label>
@@ -210,6 +210,7 @@
                                 <th>Bandwidth (Mbps)</th>
                                 <th>GPU</th>
                                 <th>Status</th>
+                                <th>Security</th>
                                 <th>Operation</th>
                             </tr>
                         </thead>

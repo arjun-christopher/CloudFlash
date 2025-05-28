@@ -337,8 +337,10 @@ def create_vm():
             storage = int(data.get("storage"))
             bandwidth = int(data.get("bandwidth", 1000))
             gpu = int(data.get("gpu", 0))
+            firewall_enabled = bool(data.get("firewall_enabled", False))
+            isolation_level = data.get("isolation_level", "STANDARD")
             
-            vm = VM(cpu, ram, storage, bandwidth, gpu)
+            vm = VM(cpu, ram, storage, bandwidth, gpu, firewall_enabled, isolation_level)
             if manager.add_vm(vm):
                 socketio.emit('metrics_update', manager.get_metrics())
                 return jsonify({"status": "success", "vm_id": vm.id}), 201

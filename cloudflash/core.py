@@ -128,6 +128,8 @@ class VM:
         self.bandwidth_used = 0
         self.gpu_used = 0
         self.status = VMStatus.IDLE
+        self.firewall_enabled = firewall_enabled
+        self.isolation_level = isolation_level  # STANDARD or STRICT
         self.lock = threading.Lock()
         self.last_activity = time.time()
         self.cloudlets = set()
@@ -407,7 +409,11 @@ class ResourceManager:
         for vm in self.vms:
             if vm.status == VMStatus.TERMINATED:
                 continue
-                
+
+            # Security Filter: Strict isolation
+            if vm.isolation_level == "STRICT" and vm.cloudlets:
+                continue
+
             # For GPU-only cloudlets, only check GPU capacity
             if is_gpu_only:
                 if vm.gpu_capacity - vm.gpu_used >= cloudlet.gpu:
@@ -882,7 +888,9 @@ class ResourceManager:
                     'gpu_used': vm.gpu_used,
                     'status': vm.status.name,
                     'last_activity': vm.last_activity,
-                    'memory_pages': vm.memory_pages
+                    'memory_pages': vm.memory_pages,
+                    "firewall_enabled": vm.firewall_enabled,
+                    "isolation_level": vm.isolation_level,
                 }
                 for vm in self.vms
             ]
