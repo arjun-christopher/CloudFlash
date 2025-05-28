@@ -1,6 +1,6 @@
 # 🌩️ CloudFlash - Mini-Project
 
-A comprehensive cloud resource management system with real-time monitoring, auto-scaling capabilities, and full observability using Prometheus. CloudFlash provides an intuitive interface for managing virtual machines (VMs) and cloudlets with advanced resource allocation and monitoring features.
+A comprehensive cloud resource management system with real-time monitoring, auto-scaling capabilities, and full observability using Prometheus. CloudFlash provides an intuitive interface for managing virtual machines (VMs) and cloudlets with advanced resource allocation, security controls, and monitoring features.
 
 ## Features
 
@@ -9,16 +9,19 @@ A comprehensive cloud resource management system with real-time monitoring, auto
 - Configure CPU, RAM, storage, bandwidth, and GPU resources
 - Real-time monitoring of VM performance and health
 - Clean up idle resources automatically
+- Preset configurations for quick VM setup (Small, Medium, Large)
 - Secure VM creation with:
   - Firewall controls (enabled by default)
   - Resource isolation levels (Standard/Strict)
   - Visual security indicators in the UI
+  - Dynamic security controls based on isolation level
 
 ### Cloudlet Management
 - Submit compute tasks with specific resource requirements
 - Set SLA priorities and execution deadlines
 - Track cloudlet lifecycle from submission to completion with real-time progress tracking
 - Monitor resource consumption per cloudlet
+- Preset configurations for common cloudlet types (Small, Medium, Large, GPU-Intensive, Memory-Intensive)
 - Visual progress indicators with SLA-based coloring:
   - **Green**: On track with SLA (more than 50% of execution time remaining)
   - **Orange**: Approaching deadline (20-50% of execution time remaining for medium/high priority, or <20% for low priority)
@@ -32,6 +35,7 @@ A comprehensive cloud resource management system with real-time monitoring, auto
   - [DEADLINE MISSED]: When cloudlet fails to complete on time
   - [SLA ESCALATED]: When cloudlet's priority is increased due to time constraints
   - [SLA WARNING]: When cloudlet is approaching its deadline
+- Input validation to prevent invalid configurations (e.g., execution time exceeding deadline)
 
 ### Load Balancing
 CloudFlash implements intelligent load balancing to distribute cloudlets across available VMs efficiently:
@@ -42,9 +46,11 @@ CloudFlash implements intelligent load balancing to distribute cloudlets across 
   - **Weighted Round Robin**: Distributes tasks based on VM capacity
   - **Best Fit**: Selects the VM that best fits the cloudlet's requirements
 
-- **Real-time Algorithm Switching**: Change load balancing strategy on-the-fly
-- **Resource-Aware Distribution**: Considers CPU, memory, and other resource constraints
-- **Visual Feedback**: Current algorithm is clearly displayed in the UI
+- **Real-time Algorithm Switching**: Change load balancing strategy on-the-fly with immediate effect
+- **Resource-Aware Distribution**: Considers CPU, memory, GPU, and other resource constraints
+- **Visual Feedback**: Current algorithm is clearly displayed in the UI with visual indicators
+- **Dynamic Adjustment**: Automatically adjusts distribution based on real-time system load
+- **Algorithm Persistence**: Remembers the selected algorithm across page refreshes
 
 ### Real-time Monitoring & Observability
 - **Live Dashboard**: Instant updates via WebSocket
@@ -87,6 +93,21 @@ CloudFlash implements intelligent load balancing to distribute cloudlets across 
   - Historical usage patterns
 - **Real-time Metrics**: Live updates of resource utilization
 - **Threshold Alerts**: Notifications for critical resource levels
+
+## User Interface
+
+### Enhanced UX Features
+- **Responsive Design**: Works on desktop and tablet devices
+- **Visual Feedback**: Clear status indicators and progress bars
+- **Success/Error Notifications**: Non-intrusive popup notifications for user actions
+- **Input Validation**: Prevents invalid configurations before submission
+- **Security-First Approach**: Clear visual indicators for security settings
+
+### Security Features
+- **Firewall Protection**: Enable/disable firewall per VM
+- **Resource Isolation**: Choose between Standard and Strict isolation levels
+- **Visual Security Indicators**: Clear indication of security status
+- **Secure Defaults**: Security features enabled by default
 
 ## Setup
 
@@ -454,4 +475,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last updated: May 27, 2025*
+*Last updated: May 28, 2025*
